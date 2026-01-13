@@ -24,15 +24,20 @@ program test_escrow.aleo {
        return fund;
     }
 
-  transition create (payee:address, amount:u64,fund:Fund) ->Escrow  {
+  transition create (payee:address, amount:u64,fund:Fund) ->(Escrow, Fund)  {
     assert_eq(fund.owner,self.caller);
-    assert(fund,balance >= amount);
-    
+    assert(fund.balance >= amount);
+
     let escrow : Escrow = Escrow {
         owner : self.caller as address,
         payee : payee,
         amount : amount,
         released :  false
+    };
+
+    let funding : Fund = Fund{
+        owner : self.caller as address,
+        balance : fund.balance - amount
     };
 
         return escrow;
