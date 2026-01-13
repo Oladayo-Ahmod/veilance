@@ -15,7 +15,7 @@ program test_escrow.aleo {
     @noupgrade
     async constructor() {}
 
-    transition addFund (amount :u64) ->  Fund{
+    transition createFund (amount :u64) ->  Fund{
         let fund : Fund = Fund{
             owner :self.caller as address,
             balance : amount
@@ -40,8 +40,12 @@ program test_escrow.aleo {
         balance : fund.balance - amount
     };
 
-        return escrow;
+        return (escrow,funding);
    }
+
+    transition release (escrow :Escrow) -> Escrow {
+    
+    }
 
 
 
