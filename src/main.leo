@@ -1,6 +1,10 @@
 // The 'test_escrow' program.
 program test_escrow.aleo {
 
+    record Fund {
+        owner: address,
+        balance: u64,
+    }
    record Escrow {
     owner: address,
     payee: address,
@@ -11,7 +15,11 @@ program test_escrow.aleo {
     @noupgrade
     async constructor() {}
 
-transition create (payee:address, amount:u64) ->Escrow  {
+    transition addFund (amount :u64) ->  {
+    
+    }
+
+  transition create (payee:address, amount:u64) ->Escrow  {
     let escrow : Escrow = Escrow {
         owner : self.caller as address,
         payee : payee,
@@ -21,4 +29,8 @@ transition create (payee:address, amount:u64) ->Escrow  {
 
         return escrow;
    }
+
+
+
+
 }
