@@ -45,6 +45,7 @@ program test_escrow.aleo {
 
     transition release (escrow :Escrow, fund : Fund) -> (Escrow,Fund,Fund) {
         assert_eq(escrow.owner, self.caller);
+        assert(escrow.amount > 0u64);
         assert_eq(fund.owner, self.caller);
 
         let updatedEscrow : Escrow = Escrow{

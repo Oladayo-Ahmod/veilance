@@ -35,14 +35,25 @@ function release:
     input r0 as Escrow.record;
     input r1 as Fund.record;
     assert.eq r0.owner self.caller;
+    gt r0.amount 0u64 into r2;
+    assert.eq r2 true;
     assert.eq r1.owner self.caller;
-    cast r0.owner r0.payee r0.amount true into r2 as Escrow.record;
-    sub r1.balance r0.amount into r3;
-    cast r1.owner r3 into r4 as Fund.record;
-    cast r0.payee r0.amount into r5 as Fund.record;
-    output r2 as Escrow.record;
-    output r4 as Fund.record;
+    cast r0.owner r0.payee r0.amount true into r3 as Escrow.record;
+    sub r1.balance r0.amount into r4;
+    cast r1.owner r4 into r5 as Fund.record;
+    cast r0.payee r0.amount into r6 as Fund.record;
+    output r3 as Escrow.record;
     output r5 as Fund.record;
+    output r6 as Fund.record;
+
+function refund:
+    input r0 as Escrow.record;
+    input r1 as Fund.record;
+    assert.neq r0.released true;
+    assert.eq r0.owner self.caller;
+    add r1.balance r0.amount into r2;
+    cast r1.owner r2 into r3 as Fund.record;
+    output r3 as Fund.record;
 
 constructor:
     assert.eq edition 0u16;
