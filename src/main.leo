@@ -43,9 +43,9 @@ program test_escrow.aleo {
         return (escrow,funding);
    }
 
-    transition release (escrow :Escrow, fund : Fund) -> Escrow {
+    transition release (escrow :Escrow, fund : Fund) -> (Escrow,Fund,Fund) {
         assert_eq(escrow.owner, self.caller);
-        as
+        assert_eq(fund.owner, self.caller);
 
         let updatedEscrow : Escrow = Escrow{
             owner :  escrow.owner,
@@ -54,9 +54,17 @@ program test_escrow.aleo {
             released : true,
         };
 
-        let OwnerFund : Fund = Fund{
+        let ownerFund : Fund = Fund{
             owner: fund.owner,
+            balance : fund.balance - escrow.amount
         }; 
+
+        let payeeFund : Fund = Fund{
+            owner:escrow.payee,
+            amount : escrow.amount
+        };
+
+        return ( ,  );
     }
 
 
