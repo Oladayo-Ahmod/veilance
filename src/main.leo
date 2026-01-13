@@ -67,6 +67,9 @@ program test_escrow.aleo {
         return (updatedEscrow ,ownerFund,payeeFund);
     }
 
+    transition refund (escrow : Escrow, fund:Fund) -> Escrow {
+        
+    }
 
 
 
