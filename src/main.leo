@@ -61,10 +61,10 @@ program test_escrow.aleo {
 
         let payeeFund : Fund = Fund{
             owner:escrow.payee,
-            amount : escrow.amount
+            balance : escrow.amount
         };
 
-        return ( ,  );
+        return (updatedEscrow ,ownerFund,payeeFund);
     }
 
 
