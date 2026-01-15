@@ -12,6 +12,14 @@ program test_escrow.aleo {
     released: bool,
 }
 
+record TimeLockedEscrow {
+    owner: address,
+    payee: address,
+    amount: u64,
+    unlock_height: u32,
+}
+
+
     @noupgrade
     async constructor() {}
 
@@ -24,9 +32,10 @@ program test_escrow.aleo {
        return fund;
     }
 
-  transition create (payee:address, amount:u64,fund:Fund) ->(Escrow, Fund)  {
+  transition create (payee:address, amount:u64,fund:Fund,unlock_height:i64) ->(Escrow, Fund)  {
     assert_eq(fund.owner,self.caller);
     assert(fund.balance >= amount);
+    assert(unlock_height > block.timestamp); 
 
     let escrow : Escrow = Escrow {
         owner : self.caller as address,
