@@ -51,11 +51,7 @@ record TimeLockedEscrow {
 
         return (escrow,funding,create_finalize(unlock_height));
    }
-
-   async transition currentTimestamp () -> Future {
    
-   }
-
 
    async function create_finalize (unlock_height:u32) {
      assert(unlock_height > block.height);
