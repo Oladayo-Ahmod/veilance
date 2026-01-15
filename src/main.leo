@@ -35,7 +35,7 @@ record TimeLockedEscrow {
    async transition create (payee:address, amount:u64,fund:Fund,unlock_height:u32) ->(Escrow, Fund,Future)  {
     assert_eq(fund.owner,self.caller);
     assert(fund.balance >= amount);
-    // assert(unlock_height > block.height); 
+    
 
     let escrow : Escrow = Escrow {
         owner : self.caller as address,
@@ -55,6 +55,7 @@ record TimeLockedEscrow {
 
    async function create_finalize (unlock_height:u32) {
      assert(unlock_height > block.height);
+     assert(1u64 > 5u64);
    }
 
     transition release (escrow :Escrow, fund : Fund) -> (Escrow,Fund) {

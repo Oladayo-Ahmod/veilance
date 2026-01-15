@@ -20,16 +20,25 @@ function create:
     input r0 as address.private;
     input r1 as u64.private;
     input r2 as Fund.record;
+    input r3 as u32.private;
     assert.eq r2.owner self.caller;
-    gte r2.balance r1 into r3;
-    assert.eq r3 true;
-    cast self.caller into r4 as address;
-    cast r4 r0 r1 false into r5 as Escrow.record;
-    cast self.caller into r6 as address;
-    sub r2.balance r1 into r7;
-    cast r6 r7 into r8 as Fund.record;
-    output r5 as Escrow.record;
-    output r8 as Fund.record;
+    gte r2.balance r1 into r4;
+    assert.eq r4 true;
+    cast self.caller into r5 as address;
+    cast r5 r0 r1 false into r6 as Escrow.record;
+    cast self.caller into r7 as address;
+    sub r2.balance r1 into r8;
+    cast r7 r8 into r9 as Fund.record;
+    async create r3 into r10;
+    output r6 as Escrow.record;
+    output r9 as Fund.record;
+    output r10 as test_escrow.aleo/create.future;
+
+finalize create:
+    input r0 as u32.public;
+    gt r0 block.height into r1;
+    assert.eq r1 true;
+    assert.eq false true;
 
 function release:
     input r0 as Escrow.record;
@@ -39,12 +48,9 @@ function release:
     assert.eq r2 true;
     assert.eq r1.owner self.caller;
     cast r0.owner r0.payee r0.amount true into r3 as Escrow.record;
-    sub r1.balance r0.amount into r4;
-    cast r1.owner r4 into r5 as Fund.record;
-    cast r0.payee r0.amount into r6 as Fund.record;
+    cast r0.payee r0.amount into r4 as Fund.record;
     output r3 as Escrow.record;
-    output r5 as Fund.record;
-    output r6 as Fund.record;
+    output r4 as Fund.record;
 
 function refund:
     input r0 as Escrow.record;
