@@ -32,7 +32,7 @@ record TimeLockedEscrow {
        return fund;
     }
 
-  transition create (payee:address, amount:u64,fund:Fund,unlock_height:u32) ->(Escrow, Fund,Future)  {
+   async transition create (payee:address, amount:u64,fund:Fund,unlock_height:u32) ->(Escrow, Fund,Future)  {
     assert_eq(fund.owner,self.caller);
     assert(fund.balance >= amount);
     // assert(unlock_height > block.height); 
@@ -49,7 +49,16 @@ record TimeLockedEscrow {
         balance : fund.balance - amount
     };
 
-        return (escrow,funding);
+        return (escrow,funding,create_finalize(unlock_height));
+   }
+
+   async transition currentTimestamp () -> Future {
+   
+   }
+
+
+   async function create_finalize (unlock_height:u32) {
+     assert(unlock_height > block.height);
    }
 
     transition release (escrow :Escrow, fund : Fund) -> (Escrow,Fund) {
