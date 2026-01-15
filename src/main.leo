@@ -32,10 +32,10 @@ record TimeLockedEscrow {
        return fund;
     }
 
-  transition create (payee:address, amount:u64,fund:Fund,unlock_height:i64) ->(Escrow, Fund)  {
+  transition create (payee:address, amount:u64,fund:Fund,unlock_height:u32) ->(Escrow, Fund,Future)  {
     assert_eq(fund.owner,self.caller);
     assert(fund.balance >= amount);
-    assert(unlock_height > block.timestamp); 
+    // assert(unlock_height > block.height); 
 
     let escrow : Escrow = Escrow {
         owner : self.caller as address,
