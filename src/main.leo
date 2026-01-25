@@ -1,7 +1,5 @@
 program freelancing_platform.aleo {
 
-    // 1. Record Types (UTXO Model)
-    // In Aleo, to "update" a record, you consume the old one and return a new one.
     record Client {
         owner: address,
         escrow_balance: u64,
@@ -13,7 +11,7 @@ program freelancing_platform.aleo {
         owner: address,
         earned_balance: u64,
         rating: u8,
-        skills: [field; 5], // Fixed-size array (Vector not supported)
+        skills: [field; 5], 
         completed_projects: u32,
     }
 
@@ -23,19 +21,16 @@ program freelancing_platform.aleo {
         amount: u64,
         milestone: u8,
         total_milestones: u8,
-        milestone_amounts: [u64; 5], // Fixed-size array
+        milestone_amounts: [u64; 5],
         description: field,
         status: u8,            // 0: Active, 1: Completed, 2: Disputed
         client_approved: bool,
         freelancer_approved: bool,
     }
 
-    // 2. Public State (Mappings)
-    // Used to track "Events" and global state publicly.
     mapping escrows: field => bool; 
     mapping platform_balance: address => u64;
 
-    // 3. Transitions (Private Logic)
 
     transition register_client() -> Client {
         return Client {
@@ -142,7 +137,6 @@ program freelancing_platform.aleo {
         };
     }
 
-    // 6. Approve Milestone (Client calls this)
     transition approve_milestone(escrow: Escrow) -> Escrow {
         // Only the client (owner) can approve the work
         assert_eq(escrow.owner, self.caller);
@@ -170,7 +164,6 @@ program freelancing_platform.aleo {
         assert_eq(escrow.owner, self.caller);
         assert(escrow.status == 0u8);
         
-        // Logic for milestone amount (Simplified)
         let amount: u64 = escrow.milestone_amounts[0u32]; 
         
         let updated_freelancer: Freelancer = Freelancer {
