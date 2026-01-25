@@ -46,6 +46,16 @@ program freelancing_platform.aleo {
         };
     }
 
+    transition register_freelancer(skills: [field; 5]) -> Freelancer {
+        return Freelancer {
+            owner: self.caller,
+            earned_balance: 0u64,
+            rating: 5u8,
+            skills: skills,
+            completed_projects: 0u32,
+        };
+    }
+
     transition deposit_funds(client: Client, amount: u64) -> Client {
         // Assertions ensure only the record owner can update it
         assert_eq(client.owner, self.caller);
@@ -98,6 +108,19 @@ program freelancing_platform.aleo {
     finalize finalize_create(id: field) {
         // Equivalent to "emitting an event" - updates public mapping
         Mapping::set(escrows, id, true);
+    }
+
+    // 2. Withdraw Funds (For Client)
+    transition withdraw_funds(client: Client, amount: u64) -> Client {
+        assert_eq(client.owner, self.caller);
+        assert(client.escrow_balance >= amount);
+        
+        return Client {
+            owner: client.owner,
+            escrow_balance: client.escrow_balance - amount,
+            rating: client.rating,
+            completed_projects: client.completed_projects,
+        };
     }
 
     transition release_milestone(
