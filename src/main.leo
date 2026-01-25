@@ -142,6 +142,27 @@ program freelancing_platform.aleo {
         };
     }
 
+    // 6. Approve Milestone (Client calls this)
+    transition approve_milestone(escrow: Escrow) -> Escrow {
+        // Only the client (owner) can approve the work
+        assert_eq(escrow.owner, self.caller);
+        assert(escrow.status == 0u8); 
+        assert(escrow.freelancer_approved); // Can only approve if work was submitted
+
+        return Escrow {
+            owner: escrow.owner,
+            payee: escrow.payee,
+            amount: escrow.amount,
+            milestone: escrow.milestone,
+            total_milestones: escrow.total_milestones,
+            milestone_amounts: escrow.milestone_amounts,
+            description: escrow.description,
+            status: escrow.status,
+            client_approved: true, // Milestone is now approved by client
+            freelancer_approved: escrow.freelancer_approved,
+        };
+    }
+
     transition release_milestone(
         escrow: Escrow, 
         freelancer: Freelancer
