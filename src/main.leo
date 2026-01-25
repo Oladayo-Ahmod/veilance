@@ -1,96 +1,136 @@
-// The 'test_escrow' program.
-program test_escrow.aleo {
+program freelancing_platform.aleo {
 
-    record Fund {
+    // 1. Record Types (UTXO Model)
+    // In Aleo, to "update" a record, you consume the old one and return a new one.
+    record Client {
         owner: address,
-        balance: u64,
+        escrow_balance: u64,
+        rating: u8,
+        completed_projects: u32,
     }
-   record Escrow {
-    owner: address,
-    payee: address,
-    amount: u64,
-    released: bool,
-}
 
-record TimeLockedEscrow {
-    owner: address,
-    payee: address,
-    amount: u64,
-    unlock_height: u32,
-}
+    record Freelancer {
+        owner: address,
+        earned_balance: u64,
+        rating: u8,
+        skills: [field; 5], // Fixed-size array (Vector not supported)
+        completed_projects: u32,
+    }
 
+    record Escrow {
+        owner: address,        // Client
+        payee: address,        // Freelancer
+        amount: u64,
+        milestone: u8,
+        total_milestones: u8,
+        milestone_amounts: [u64; 5], // Fixed-size array
+        description: field,
+        status: u8,            // 0: Active, 1: Completed, 2: Disputed
+        client_approved: bool,
+        freelancer_approved: bool,
+    }
 
-    @noupgrade
-    async constructor() {}
+    // 2. Public State (Mappings)
+    // Used to track "Events" and global state publicly.
+    mapping escrows: field => bool; 
+    mapping platform_balance: address => u64;
 
-    transition createFund (amount :u64) ->  Fund{
-        let fund : Fund = Fund{
-            owner :self.caller as address,
-            balance : amount
+    // 3. Transitions (Private Logic)
+
+    transition register_client() -> Client {
+        return Client {
+            owner: self.caller,
+            escrow_balance: 0u64,
+            rating: 5u8,
+            completed_projects: 0u32,
+        };
+    }
+
+    transition deposit_funds(client: Client, amount: u64) -> Client {
+        // Assertions ensure only the record owner can update it
+        assert_eq(client.owner, self.caller);
+        
+        return Client {
+            owner: client.owner,
+            escrow_balance: client.escrow_balance + amount,
+            rating: client.rating,
+            completed_projects: client.completed_projects,
+        };
+    }
+
+    transition create_escrow(
+        payee: address,
+        total_amount: u64,
+        milestone_amounts: [u64; 5],
+        description: field,
+        client: Client
+    ) -> (Escrow, Client) {
+        assert_eq(client.owner, self.caller);
+        assert(client.escrow_balance >= total_amount);
+
+        // Calculate unique ID (Poseidon hash)
+        let escrow_id: field = Poseidon2::hash_to_field(self.caller);
+
+        let escrow: Escrow = Escrow {
+            owner: self.caller,
+            payee: payee,
+            amount: total_amount,
+            milestone: 0u8,
+            total_milestones: 5u8,
+            milestone_amounts: milestone_amounts,
+            description: description,
+            status: 0u8,
+            client_approved: false,
+            freelancer_approved: false,
         };
 
-       return fund;
+        let updated_client: Client = Client {
+            owner: client.owner,
+            escrow_balance: client.escrow_balance - total_amount,
+            rating: client.rating,
+            completed_projects: client.completed_projects,
+        };
+
+        // 'then finalize' is how we update public state
+        return (escrow, updated_client) then finalize_create(escrow_id);
     }
 
-   async transition create (payee:address, amount:u64,fund:Fund,unlock_height:u32) ->(Escrow, Fund,Future)  {
-    assert_eq(fund.owner,self.caller);
-    assert(fund.balance >= amount);
-    
+    finalize finalize_create(id: field) {
+        // Equivalent to "emitting an event" - updates public mapping
+        Mapping::set(escrows, id, true);
+    }
 
-    let escrow : Escrow = Escrow {
-        owner : self.caller as address,
-        payee : payee,
-        amount : amount,
-        released :  false
-    };
-
-    let funding : Fund = Fund{
-        owner : self.caller as address,
-        balance : fund.balance - amount
-    };
-
-        return (escrow,funding,create_finalize(unlock_height));
-   }
-   
-
-   async function create_finalize (unlock_height:u32) {
-     assert(unlock_height > block.height);
-     assert(1u64 > 5u64);
-   }
-
-    transition release (escrow :Escrow, fund : Fund) -> (Escrow,Fund) {
+    transition release_milestone(
+        escrow: Escrow, 
+        freelancer: Freelancer
+    ) -> (Escrow, Freelancer) {
         assert_eq(escrow.owner, self.caller);
-        assert(escrow.amount > 0u64);
-        assert_eq(fund.owner, self.caller);
-
-        let updatedEscrow : Escrow = Escrow{
-            owner :  escrow.owner,
-            payee : escrow.payee,
-            amount : escrow.amount,
-            released : true,
+        assert(escrow.status == 0u8);
+        
+        // Logic for milestone amount (Simplified)
+        let amount: u64 = escrow.milestone_amounts[0u32]; 
+        
+        let updated_freelancer: Freelancer = Freelancer {
+            owner: freelancer.owner,
+            earned_balance: freelancer.earned_balance + amount,
+            rating: freelancer.rating,
+            skills: freelancer.skills,
+            completed_projects: freelancer.completed_projects + 1u32,
         };
 
-
-        let payeeFund : Fund = Fund{
-            owner:escrow.payee,
-            balance : escrow.amount
+        let updated_escrow: Escrow = Escrow {
+            owner: escrow.owner,
+            payee: escrow.payee,
+            amount: escrow.amount - amount,
+            milestone: escrow.milestone + 1u8,
+            total_milestones: escrow.total_milestones,
+            milestone_amounts: escrow.milestone_amounts,
+            description: escrow.description,
+            status: (escrow.milestone + 1u8 >= escrow.total_milestones) ? 1u8 : 0u8,
+            client_approved: false,
+            freelancer_approved: false,
         };
 
-        return (updatedEscrow,payeeFund);
+        return (updated_escrow, updated_freelancer);
     }
-
-    transition refund (escrow : Escrow, fund:Fund) -> Fund {
-        assert_neq(escrow.released,true);
-        assert_eq(escrow.owner, self.caller);
-
-        let updatedFund : Fund = Fund{
-            owner : fund.owner,
-            balance : fund.balance + escrow.amount
-        };
-
-        return updatedFund;
-    }   
-
-
-
 }
