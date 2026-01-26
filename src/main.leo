@@ -63,13 +63,13 @@ program freelancing_platform.aleo {
         };
     }
 
-    transition create_escrow(
+    async transition create_escrow(
         payee: address,
         total_amount: u64,
         milestone_amounts: [u64; 5],
         description: field,
         client: Client
-    ) -> (Escrow, Client) {
+    ) -> (Escrow, Client, Future) {
         assert_eq(client.owner, self.caller);
         assert(client.escrow_balance >= total_amount);
 
@@ -97,10 +97,10 @@ program freelancing_platform.aleo {
         };
 
         // 'then finalize' is how we update public state
-        return (escrow, updated_client) then finalize_create(escrow_id);
+        return (escrow, updated_client,finalize_create(escrow_id));
     }
 
-    finalize finalize_create(id: field) {
+    async function finalize_create(id: field) {
         // Equivalent to "emitting an event" - updates public mapping
         Mapping::set(escrows, id, true);
     }
