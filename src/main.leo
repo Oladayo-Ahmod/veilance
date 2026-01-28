@@ -26,20 +26,20 @@ program freelancing_platform.aleo {
         status: u8,            // 0: Active, 1: Completed, 2: Disputed
     }
 
-    // ─────────────────────────────────────────────
+    // ─────────────────────────────
     // Storage
-    // ─────────────────────────────────────────────
+    // ─────────────────────────────
 
     mapping escrows: field => bool;
     mapping milestone_submitted: field => bool;
 
-    // ─────────────────────────────────────────────
+    // ─────────────────────────────
     // Registration
-    // ─────────────────────────────────────────────
+    // ─────────────────────────────
 
     transition register_client() -> Client {
         return Client {
-            owner: self.caller as address,
+            owner: self.caller,
             escrow_balance: 0u64,
             rating: 0u8,
             completed_projects: 0u32,
@@ -48,7 +48,7 @@ program freelancing_platform.aleo {
 
     transition register_freelancer(skills: [field; 5]) -> Freelancer {
         return Freelancer {
-            owner: self.caller as address,
+            owner: self.caller,
             earned_balance: 0u64,
             rating: 5u8,
             skills: skills,
@@ -56,9 +56,9 @@ program freelancing_platform.aleo {
         };
     }
 
-    // ─────────────────────────────────────────────
+    // ─────────────────────────────
     // Client funds
-    // ─────────────────────────────────────────────
+    // ─────────────────────────────
 
     transition deposit_funds(client: Client, amount: u64) -> Client {
         assert_eq(client.owner, self.caller);
@@ -71,9 +71,9 @@ program freelancing_platform.aleo {
         };
     }
 
-    // ─────────────────────────────────────────────
+    // ─────────────────────────────
     // Escrow creation
-    // ─────────────────────────────────────────────
+    // ─────────────────────────────
 
     async transition create_escrow(
         payee: address,
@@ -114,27 +114,22 @@ program freelancing_platform.aleo {
         Mapping::set(milestone_submitted, id, false);
     }
 
-    // ─────────────────────────────────────────────
-    // Freelancer submits milestone (NO escrow input)
-    // ─────────────────────────────────────────────
+    // ─────────────────────────────
+    // Freelancer submits milestone
+    // ─────────────────────────────
 
-    transition submit_milestone(
-        escrow_id: field,
-        escrow: Escrow
-    )->Future {
-        assert_eq(escrow.payee, self.caller);
-        assert(escrow.status == 0u8);
-
-        return finalize_submit_milestone(escrow_id);
+    async transition submit_milestone(escrow_id: field)->Future {
+       return finalize_submit_milestone(escrow_id);
     }
 
     async function finalize_submit_milestone (escrow_id:field) {
+        assert(Mapping::get(escrows, escrow_id));
         Mapping::set(milestone_submitted, escrow_id, true);
-    
     }
-    // ─────────────────────────────────────────────
-    // Client approves + releases in ONE step
-    // ─────────────────────────────────────────────
+
+    // ─────────────────────────────
+    // Client approves + releases
+    // ─────────────────────────────
 
     transition approve_and_release(
         escrow_id: field,
@@ -143,8 +138,8 @@ program freelancing_platform.aleo {
     ) -> (Escrow, Freelancer) {
 
         assert_eq(escrow.owner, self.caller);
-        assert(escrow.status == 0u8);
         assert(Mapping::get(milestone_submitted, escrow_id));
+        assert(escrow.status == 0u8);
 
         let index: u32 = escrow.milestone as u32;
         let amount: u64 = escrow.milestone_amounts[index];
@@ -158,7 +153,7 @@ program freelancing_platform.aleo {
         };
 
         let next_milestone: u8 = escrow.milestone + 1u8;
-        let completed: bool = next_milestone >= escrow.total_milestones;
+        let done: bool = next_milestone >= escrow.total_milestones;
 
         let updated_escrow: Escrow = Escrow {
             owner: escrow.owner,
@@ -168,7 +163,7 @@ program freelancing_platform.aleo {
             total_milestones: escrow.total_milestones,
             milestone_amounts: escrow.milestone_amounts,
             description: escrow.description,
-            status: completed ? 1u8 : 0u8,
+            status: done ? 1u8 : 0u8,
         };
 
         Mapping::set(milestone_submitted, escrow_id, false);
