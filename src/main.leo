@@ -11,32 +11,37 @@ program freelancing_platform.aleo {
         owner: address,
         earned_balance: u64,
         rating: u8,
-        skills: [field; 5], 
+        skills: [field; 5],
         completed_projects: u32,
     }
 
     record Escrow {
         owner: address,        // Client
         payee: address,        // Freelancer
-        amount: u64,
+        remaining_amount: u64,
         milestone: u8,
         total_milestones: u8,
-        milestone_amounts: [u64; 5],
+        milestone_amounts: [u64; 2],
         description: field,
         status: u8,            // 0: Active, 1: Completed, 2: Disputed
-        client_approved: bool,
-        freelancer_approved: bool,
     }
 
-    mapping escrows: field => bool; 
-    mapping platform_balance: address => u64;
+    // ─────────────────────────────────────────────
+    // Storage
+    // ─────────────────────────────────────────────
 
+    mapping escrows: field => bool;
+    mapping milestone_submitted: field => bool;
+
+    // ─────────────────────────────────────────────
+    // Registration
+    // ─────────────────────────────────────────────
 
     transition register_client() -> Client {
         return Client {
             owner: self.caller,
             escrow_balance: 0u64,
-            rating: 5u8,
+            rating: 0u8,
             completed_projects: 0u32,
         };
     }
@@ -51,10 +56,13 @@ program freelancing_platform.aleo {
         };
     }
 
+    // ─────────────────────────────────────────────
+    // Client funds
+    // ─────────────────────────────────────────────
+
     transition deposit_funds(client: Client, amount: u64) -> Client {
-        // Assertions ensure only the record owner can update it
         assert_eq(client.owner, self.caller);
-        
+
         return Client {
             owner: client.owner,
             escrow_balance: client.escrow_balance + amount,
@@ -63,30 +71,32 @@ program freelancing_platform.aleo {
         };
     }
 
+    // ─────────────────────────────────────────────
+    // Escrow creation
+    // ─────────────────────────────────────────────
+
     async transition create_escrow(
         payee: address,
         total_amount: u64,
-        milestone_amounts: [u64; 5],
+        milestone_amounts: [u64; 2],
         description: field,
         client: Client
     ) -> (Escrow, Client, Future) {
+
         assert_eq(client.owner, self.caller);
         assert(client.escrow_balance >= total_amount);
 
-        // Calculate unique ID (Poseidon hash)
         let escrow_id: field = Poseidon2::hash_to_field(self.caller);
 
         let escrow: Escrow = Escrow {
             owner: self.caller,
             payee: payee,
-            amount: total_amount,
+            remaining_amount: total_amount,
             milestone: 0u8,
-            total_milestones: 5u8,
+            total_milestones: 2u8,
             milestone_amounts: milestone_amounts,
             description: description,
             status: 0u8,
-            client_approved: false,
-            freelancer_approved: false,
         };
 
         let updated_client: Client = Client {
@@ -96,76 +106,45 @@ program freelancing_platform.aleo {
             completed_projects: client.completed_projects,
         };
 
-        // 'then finalize' is how we update public state
-        return (escrow, updated_client,finalize_create(escrow_id));
+        return (escrow, updated_client, finalize_create(escrow_id));
     }
 
     async function finalize_create(id: field) {
-        // Equivalent to "emitting an event" - updates public mapping
         Mapping::set(escrows, id, true);
+        Mapping::set(milestone_submitted, id, false);
     }
 
-    // 2. Withdraw Funds (For Client)
-    transition withdraw_funds(client: Client, amount: u64) -> Client {
-        assert_eq(client.owner, self.caller);
-        assert(client.escrow_balance >= amount);
-        
-        return Client {
-            owner: client.owner,
-            escrow_balance: client.escrow_balance - amount,
-            rating: client.rating,
-            completed_projects: client.completed_projects,
-        };
-    }
+    // ─────────────────────────────────────────────
+    // Freelancer submits milestone (NO escrow input)
+    // ─────────────────────────────────────────────
 
-    transition submit_milestone(escrow: Escrow) -> Escrow {
-        // Only the freelancer (payee) can submit work
+    transition submit_milestone(
+        escrow_id: field,
+        escrow: Escrow
+    ) {
         assert_eq(escrow.payee, self.caller);
-        assert(escrow.status == 0u8); 
-        
-        return Escrow {
-            owner: escrow.owner,
-            payee: escrow.payee,
-            amount: escrow.amount,
-            milestone: escrow.milestone,
-            total_milestones: escrow.total_milestones,
-            milestone_amounts: escrow.milestone_amounts,
-            description: escrow.description,
-            status: escrow.status,
-            client_approved: escrow.client_approved,
-            freelancer_approved: true, // Mark work as submitted
-        };
+        assert(escrow.status == 0u8);
+
+        Mapping::set(milestone_submitted, escrow_id, true);
     }
 
-    transition approve_milestone(escrow: Escrow) -> Escrow {
-        // Only the client (owner) can approve the work
-        assert_eq(escrow.owner, self.caller);
-        assert(escrow.status == 0u8); 
-        assert(escrow.freelancer_approved); // Can only approve if work was submitted
+    // ─────────────────────────────────────────────
+    // Client approves + releases in ONE step
+    // ─────────────────────────────────────────────
 
-        return Escrow {
-            owner: escrow.owner,
-            payee: escrow.payee,
-            amount: escrow.amount,
-            milestone: escrow.milestone,
-            total_milestones: escrow.total_milestones,
-            milestone_amounts: escrow.milestone_amounts,
-            description: escrow.description,
-            status: escrow.status,
-            client_approved: true, // Milestone is now approved by client
-            freelancer_approved: escrow.freelancer_approved,
-        };
-    }
-
-    transition release_milestone(
-        escrow: Escrow, 
+    transition approve_and_release(
+        escrow_id: field,
+        escrow: Escrow,
         freelancer: Freelancer
     ) -> (Escrow, Freelancer) {
+
         assert_eq(escrow.owner, self.caller);
         assert(escrow.status == 0u8);
-        
-        let amount: u64 = escrow.milestone_amounts[0u32]; 
-        
+        assert(Mapping::get(milestone_submitted, escrow_id));
+
+        let index: u32 = escrow.milestone as u32;
+        let amount: u64 = escrow.milestone_amounts[index];
+
         let updated_freelancer: Freelancer = Freelancer {
             owner: freelancer.owner,
             earned_balance: freelancer.earned_balance + amount,
@@ -174,21 +153,22 @@ program freelancing_platform.aleo {
             completed_projects: freelancer.completed_projects + 1u32,
         };
 
+        let next_milestone: u8 = escrow.milestone + 1u8;
+        let completed: bool = next_milestone >= escrow.total_milestones;
+
         let updated_escrow: Escrow = Escrow {
             owner: escrow.owner,
             payee: escrow.payee,
-            amount: escrow.amount - amount,
-            milestone: escrow.milestone + 1u8,
+            remaining_amount: escrow.remaining_amount - amount,
+            milestone: next_milestone,
             total_milestones: escrow.total_milestones,
             milestone_amounts: escrow.milestone_amounts,
             description: escrow.description,
-            status: (escrow.milestone + 1u8 >= escrow.total_milestones) ? 1u8 : 0u8,
-            client_approved: false,
-            freelancer_approved: false,
+            status: completed ? 1u8 : 0u8,
         };
+
+        Mapping::set(milestone_submitted, escrow_id, false);
 
         return (updated_escrow, updated_freelancer);
     }
-
-
 }
