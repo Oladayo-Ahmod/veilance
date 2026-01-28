@@ -39,7 +39,7 @@ program freelancing_platform.aleo {
 
     transition register_client() -> Client {
         return Client {
-            owner: self.caller,
+            owner: self.caller as address,
             escrow_balance: 0u64,
             rating: 0u8,
             completed_projects: 0u32,
@@ -48,7 +48,7 @@ program freelancing_platform.aleo {
 
     transition register_freelancer(skills: [field; 5]) -> Freelancer {
         return Freelancer {
-            owner: self.caller,
+            owner: self.caller as address,
             earned_balance: 0u64,
             rating: 5u8,
             skills: skills,
@@ -121,13 +121,17 @@ program freelancing_platform.aleo {
     transition submit_milestone(
         escrow_id: field,
         escrow: Escrow
-    ) {
+    )->Future {
         assert_eq(escrow.payee, self.caller);
         assert(escrow.status == 0u8);
 
-        Mapping::set(milestone_submitted, escrow_id, true);
+        return finalize_submit_milestone(escrow_id);
     }
 
+    async function finalize_submit_milestone (escrow_id:field) {
+        Mapping::set(milestone_submitted, escrow_id, true);
+    
+    }
     // ─────────────────────────────────────────────
     // Client approves + releases in ONE step
     // ─────────────────────────────────────────────
