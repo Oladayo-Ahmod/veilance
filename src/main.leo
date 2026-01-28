@@ -39,7 +39,7 @@ program freelancing_platform.aleo {
 
     transition register_client() -> Client {
         return Client {
-            owner: self.caller,
+            owner: self.caller as address,
             escrow_balance: 0u64,
             rating: 0u8,
             completed_projects: 0u32,
@@ -48,7 +48,7 @@ program freelancing_platform.aleo {
 
     transition register_freelancer(skills: [field; 5]) -> Freelancer {
         return Freelancer {
-            owner: self.caller,
+            owner: self.caller as address,
             earned_balance: 0u64,
             rating: 5u8,
             skills: skills,
@@ -131,18 +131,21 @@ program freelancing_platform.aleo {
     // Client approves + releases
     // ─────────────────────────────
 
-    transition approve_and_release(
+   async transition approve_and_release(
         escrow_id: field,
         escrow: Escrow,
         freelancer: Freelancer
-    ) -> (Escrow, Freelancer) {
+    ) -> (Escrow, Freelancer,Future) {
 
         assert_eq(escrow.owner, self.caller);
-        assert(Mapping::get(milestone_submitted, escrow_id));
         assert(escrow.status == 0u8);
-
-        let index: u32 = escrow.milestone as u32;
-        let amount: u64 = escrow.milestone_amounts[index];
+        let amount: u64 = escrow.milestone_amounts[0u32];
+        
+        if escrow.milestone == 0u8 {
+            amount = escrow.milestone_amounts[0u32];
+        } else {
+           amount = escrow.milestone_amounts[1u32];
+        }
 
         let updated_freelancer: Freelancer = Freelancer {
             owner: freelancer.owner,
@@ -166,8 +169,11 @@ program freelancing_platform.aleo {
             status: done ? 1u8 : 0u8,
         };
 
-        Mapping::set(milestone_submitted, escrow_id, false);
+        return (updated_escrow, updated_freelancer,finalize_approve_and_release(escrow_id));
+    }
 
-        return (updated_escrow, updated_freelancer);
+    async function finalize_approve_and_release (escrow_id:field) {
+        assert(Mapping::get(milestone_submitted, escrow_id));
+         Mapping::set(milestone_submitted, escrow_id, false);
     }
 }
