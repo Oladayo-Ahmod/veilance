@@ -16,22 +16,20 @@ record Freelancer:
 record Escrow:
     owner as address.private;
     payee as address.private;
-    amount as u64.private;
+    remaining_amount as u64.private;
     milestone as u8.private;
     total_milestones as u8.private;
     milestone_amounts as [u64; 2u32].private;
     description as field.private;
     status as u8.private;
-    client_approved as boolean.private;
-    freelancer_approved as boolean.private;
 
 mapping escrows:
     key as field.public;
     value as boolean.public;
 
-mapping platform_balance:
-    key as address.public;
-    value as u64.public;
+mapping milestone_submitted:
+    key as field.public;
+    value as boolean.public;
 
 function register_client:
     cast self.caller into r0 as address;
@@ -63,7 +61,7 @@ function create_escrow:
     assert.eq r5 true;
     hash.psd2 self.caller into r6 as field;
     cast self.caller into r7 as address;
-    cast r7 r0 r1 0u8 2u8 r2 r3 0u8 false false into r8 as Escrow.record;
+    cast r7 r0 r1 0u8 2u8 r2 r3 0u8 into r8 as Escrow.record;
     sub r4.escrow_balance r1 into r9;
     cast r4.owner r9 r4.rating r4.completed_projects into r10 as Client.record;
     async create_escrow r6 into r11;
@@ -74,48 +72,43 @@ function create_escrow:
 finalize create_escrow:
     input r0 as field.public;
     set true into escrows[r0];
-
-function withdraw_funds:
-    input r0 as Client.record;
-    input r1 as u64.private;
-    assert.eq r0.owner self.caller;
-    gte r0.escrow_balance r1 into r2;
-    assert.eq r2 true;
-    sub r0.escrow_balance r1 into r3;
-    cast r0.owner r3 r0.rating r0.completed_projects into r4 as Client.record;
-    output r4 as Client.record;
+    set false into milestone_submitted[r0];
 
 function submit_milestone:
-    input r0 as Escrow.record;
-    assert.eq r0.payee self.caller;
-    is.eq r0.status 0u8 into r1;
-    assert.eq r1 true;
-    cast r0.owner r0.payee r0.amount r0.milestone r0.total_milestones r0.milestone_amounts r0.description r0.status r0.client_approved true into r2 as Escrow.record;
-    output r2 as Escrow.record;
+    input r0 as field.private;
+    async submit_milestone r0 into r1;
+    output r1 as freelancing_platform.aleo/submit_milestone.future;
 
-function approve_milestone:
-    input r0 as Escrow.record;
-    assert.eq r0.owner self.caller;
-    is.eq r0.status 0u8 into r1;
+finalize submit_milestone:
+    input r0 as field.public;
+    get escrows[r0] into r1;
     assert.eq r1 true;
-    assert.eq r0.freelancer_approved true;
-    cast r0.owner r0.payee r0.amount r0.milestone r0.total_milestones r0.milestone_amounts r0.description r0.status true r0.freelancer_approved into r2 as Escrow.record;
-    output r2 as Escrow.record;
+    set true into milestone_submitted[r0];
 
-function release_milestone:
-    input r0 as Escrow.record;
-    input r1 as Freelancer.record;
-    assert.eq r0.owner self.caller;
-    is.eq r0.status 0u8 into r2;
-    assert.eq r2 true;
-    add r1.earned_balance r0.milestone_amounts[0u32] into r3;
-    add r1.completed_projects 1u32 into r4;
-    cast r1.owner r3 r1.rating r1.skills r4 into r5 as Freelancer.record;
-    sub r0.amount r0.milestone_amounts[0u32] into r6;
-    add r0.milestone 1u8 into r7;
-    add r0.milestone 1u8 into r8;
-    gte r8 r0.total_milestones into r9;
-    ternary r9 1u8 0u8 into r10;
-    cast r0.owner r0.payee r6 r7 r0.total_milestones r0.milestone_amounts r0.description r10 false false into r11 as Escrow.record;
-    output r11 as Escrow.record;
-    output r5 as Freelancer.record;
+function approve_and_release:
+    input r0 as field.private;
+    input r1 as Escrow.record;
+    input r2 as Freelancer.record;
+    assert.eq r1.owner self.caller;
+    is.eq r1.status 0u8 into r3;
+    assert.eq r3 true;
+    is.eq r1.milestone 0u8 into r4;
+    ternary r4 r1.milestone_amounts[0u32] r1.milestone_amounts[1u32] into r5;
+    add r2.earned_balance r5 into r6;
+    add r2.completed_projects 1u32 into r7;
+    cast r2.owner r6 r2.rating r2.skills r7 into r8 as Freelancer.record;
+    add r1.milestone 1u8 into r9;
+    gte r9 r1.total_milestones into r10;
+    sub r1.remaining_amount r5 into r11;
+    ternary r10 1u8 0u8 into r12;
+    cast r1.owner r1.payee r11 r9 r1.total_milestones r1.milestone_amounts r1.description r12 into r13 as Escrow.record;
+    async approve_and_release r0 into r14;
+    output r13 as Escrow.record;
+    output r8 as Freelancer.record;
+    output r14 as freelancing_platform.aleo/approve_and_release.future;
+
+finalize approve_and_release:
+    input r0 as field.public;
+    get milestone_submitted[r0] into r1;
+    assert.eq r1 true;
+    set false into milestone_submitted[r0];

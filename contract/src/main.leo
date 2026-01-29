@@ -89,7 +89,7 @@ program freelancing_platform.aleo {
         let escrow_id: field = Poseidon2::hash_to_field(self.caller);
 
         let escrow: Escrow = Escrow {
-            owner: self.caller,
+            owner: self.caller as address,
             payee: payee,
             remaining_amount: total_amount,
             milestone: 0u8,
