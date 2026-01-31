@@ -1,13 +1,24 @@
-import { useEffect, useState } from 'react';
+interface SkillsCloudProps {
+  skills: string[];
+}
 
-const skills = [
-  'Solidity', 'React', 'TypeScript', 'Zero-Knowledge', 'Aleo',
-  'Smart Contracts', 'Web3', 'Frontend', 'Backend', 'Security',
-  'Cryptography', 'DeFi', 'NFT', 'DAO', 'Layer 2'
-];
+export default function SkillsCloud({ skills }: SkillsCloudProps) {
+  const colors = [
+    'from-purple-600 to-pink-600',
+    'from-blue-600 to-cyan-600',
+    'from-green-600 to-emerald-600',
+    'from-orange-600 to-red-600',
+    'from-indigo-600 to-purple-600',
+  ];
 
-export default function SkillsCloud() {
-  const [hoveredSkill, setHoveredSkill] = useState<string | null>(null);
+  if (skills.length === 0) {
+    return (
+      <div className="text-center py-8 text-gray-400">
+        <div className="text-3xl mb-2">🎯</div>
+        <p>No skills added yet</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-wrap gap-3 justify-center">
@@ -16,16 +27,11 @@ export default function SkillsCloud() {
           key={skill}
           className={`
             px-4 py-2 rounded-full cursor-pointer transition-all duration-300
-            ${hoveredSkill === skill 
-              ? 'bg-gradient-to-r from-purple-600 to-blue-600 scale-110' 
-              : 'bg-white/10 hover:bg-white/20'
-            }
+            hover:scale-110 bg-gradient-to-r ${colors[index % colors.length]}
           `}
           style={{
             animationDelay: `${index * 100}ms`
           }}
-          onMouseEnter={() => setHoveredSkill(skill)}
-          onMouseLeave={() => setHoveredSkill(null)}
         >
           <span className="text-sm font-medium">{skill}</span>
         </div>

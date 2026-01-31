@@ -7,12 +7,14 @@ import GlassCard from "./components/GlassCard";
 import StatsCard from "./components/StatsCard";
 import ProjectCard from "./components/ProjectCard";
 import SkillsCloud from "./components/SkillsCloud";
+import EscrowForm from "./components/EscrowForm";
+import MilestoneSubmission from "./components/MilestoneSubmission";
 import * as THREE from 'three';
 import { createSupabaseClient } from "./lib/supabase";
-import { aleoClient } from "./lib/aleo";
 
 type UserRole = 'client' | 'freelancer' | null;
 type EscrowStatus = 'active' | 'completed' | 'disputed';
+type Skill = string;
 
 interface Escrow {
   id: string;
@@ -24,18 +26,39 @@ interface Escrow {
   description: string;
   status: EscrowStatus;
   createdAt: string;
+  milestoneAmounts: number[];
+  remainingAmount: number;
+  milestoneSubmitted: boolean;
+}
+
+interface UserStats {
+  totalProjects: number;
+  completedProjects: number;
+  totalEarned: number;
+  rating: number;
+  skills: Skill[];
 }
 
 export default function Home() {
-  const { connected, address, executeTransaction, requestRecords, transactionStatus } = useWallet();
+  const { connected, address, executeTransaction, requestRecords, transactionStatus, decrypt } = useWallet();
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
   const [userRole, setUserRole] = useState<UserRole>(null);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'projects' | 'escrow' | 'profile'>('dashboard');
-  const [balance, setBalance] = useState(0);
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'projects' | 'create' | 'profile'>('dashboard');
+  const [userStats, setUserStats] = useState<UserStats>({
+    totalProjects: 0,
+    completedProjects: 0,
+    totalEarned: 0,
+    rating: 5.0,
+    skills: []
+  });
   const [projects, setProjects] = useState<Escrow[]>([]);
   const [loading, setLoading] = useState(false);
   const [notification, setNotification] = useState('');
+  const [showRegisterModal, setShowRegisterModal] = useState(false);
+  const [registerSkills, setRegisterSkills] = useState<Skill[]>([]);
+  const [showSkillsInput, setShowSkillsInput] = useState(false);
+  const [depositAmount, setDepositAmount] = useState('');
   
   // 3D Background Effect
   useEffect(() => {
@@ -103,14 +126,25 @@ export default function Home() {
     if (connected && address) {
       checkUserRegistration();
       loadProjects();
+      loadUserStats();
     }
   }, [connected, address]);
 
   const checkUserRegistration = async () => {
     try {
-      const records = await requestRecords?.("freelancing_platform.aleo", false);
-      // Logic to check if user is registered as client or freelancer
-      // This would involve checking records and supabase data
+      const supabase = createSupabaseClient();
+      const { data } = await supabase
+        .from('users')
+        .select('role, skills')
+        .eq('address', address)
+        .single();
+      
+      if (data) {
+        setUserRole(data.role);
+        if (data.skills) {
+          setUserStats(prev => ({ ...prev, skills: data.skills }));
+        }
+      }
     } catch (error) {
       console.error("Error checking registration:", error);
     }
@@ -123,10 +157,51 @@ export default function Home() {
     const { data } = await supabase
       .from('escrows')
       .select('*')
-      .or(`client.eq.${address},freelancer.eq.${address}`)
+      .or(`client_address.eq.${address},freelancer_address.eq.${address}`)
       .order('created_at', { ascending: false });
     
-    setProjects(data || []);
+    if (data) {
+      const formattedProjects = data.map(escrow => ({
+        id: escrow.id,
+        client: escrow.client_address,
+        freelancer: escrow.freelancer_address,
+        amount: parseFloat(escrow.total_amount),
+        milestones: escrow.total_milestones,
+        currentMilestone: escrow.milestone,
+        description: escrow.description,
+        status: escrow.status,
+        createdAt: escrow.created_at,
+        milestoneAmounts: escrow.milestone_amounts.map((a: string) => parseFloat(a)),
+        remainingAmount: parseFloat(escrow.remaining_amount),
+        milestoneSubmitted: escrow.current_milestone_submitted
+      }));
+      setProjects(formattedProjects);
+    }
+  };
+
+  const loadUserStats = async () => {
+    if (!address || !userRole) return;
+    
+    try {
+      const supabase = createSupabaseClient();
+      const { data } = await supabase
+        .from('users')
+        .select('*')
+        .eq('address', address)
+        .single();
+      
+      if (data) {
+        setUserStats({
+          totalProjects: userRole === 'client' ? data.completed_projects_as_client : data.completed_projects_as_freelancer,
+          completedProjects: userRole === 'client' ? data.completed_projects_as_client : data.completed_projects_as_freelancer,
+          totalEarned: parseFloat(data.earned_balance || '0'),
+          rating: parseFloat(userRole === 'client' ? data.client_rating : data.freelancer_rating),
+          skills: data.skills || []
+        });
+      }
+    } catch (error) {
+      console.error("Error loading user stats:", error);
+    }
   };
 
   const registerAsClient = async () => {
@@ -144,8 +219,20 @@ export default function Home() {
 
       if (tx?.transactionId) {
         await pollTransaction(tx.transactionId);
+        
+        // Store in Supabase
+        const supabase = createSupabaseClient();
+        await supabase.from('users').upsert({
+          address: address,
+          role: 'client',
+          client_rating: 0,
+          completed_projects_as_client: 0,
+          escrow_balance: 0
+        });
+        
         setUserRole('client');
         showNotification("Successfully registered as client!");
+        setShowRegisterModal(false);
       }
     } catch (error: any) {
       console.error("Registration error:", error);
@@ -155,36 +242,51 @@ export default function Home() {
     }
   };
 
-  const registerAsFreelancer = async (skills: string[]) => {
-    if (!executeTransaction) return;
+  const registerAsFreelancer = async () => {
+    if (!executeTransaction || !address) return;
     
     setLoading(true);
     try {
-      // Convert skills to field array format
-      const skillFields = skills.map(skill => `"${skill}"field`).join(',');
+      // Convert skills to field array format (max 5 skills)
+      const skillsToUse = registerSkills.slice(0, 5);
+      const skillFields = skillsToUse.map(skill => `"${skill}"field`).join(',');
+      const skillInput = skillsToUse.length > 0 ? `[${skillFields}]` : `["web3"field, "development"field, "design"field, "marketing"field, "consulting"field]`;
       
       const tx = await executeTransaction({
         program: "freelancing_platform.aleo",
         function: "register_freelancer",
-        inputs: [`[${skillFields}]`],
+        inputs: [skillInput],
         fee: 100000,
         privateFee: false,
       });
 
       if (tx?.transactionId) {
         await pollTransaction(tx.transactionId);
-        setUserRole('freelancer');
         
         // Store in Supabase
         const supabase = createSupabaseClient();
-        await supabase.from('freelancers').upsert({
+        await supabase.from('users').upsert({
           address: address,
-          skills: skills,
-          rating: 5,
-          completed_projects: 0
+          role: 'freelancer',
+          freelancer_rating: 5.0,
+          completed_projects_as_freelancer: 0,
+          earned_balance: 0,
+          skills: skillsToUse
         });
         
+        // Store individual skills
+        for (const skill of skillsToUse) {
+          await supabase.from('freelancer_skills').upsert({
+            freelancer_address: address,
+            skill: skill,
+            proficiency_level: 'intermediate'
+          });
+        }
+        
+        setUserRole('freelancer');
+        setUserStats(prev => ({ ...prev, skills: skillsToUse }));
         showNotification("Successfully registered as freelancer!");
+        setShowRegisterModal(false);
       }
     } catch (error: any) {
       console.error("Registration error:", error);
@@ -194,15 +296,63 @@ export default function Home() {
     }
   };
 
-  const createEscrow = async (payee: string, amount: number, milestones: number, description: string) => {
+  const handleDepositFunds = async () => {
+    if (!executeTransaction || !address || !depositAmount) return;
+    
+    setLoading(true);
+    try {
+      // Get client record
+      const records = await requestRecords?.("freelancing_platform.aleo", false);
+      const clientRecord = records?.find((r: any) => 
+        typeof r === 'string' && r.includes('owner') && r.includes(address)
+      );
+      
+      if (!clientRecord) {
+        showNotification("Client record not found. Please register as client first.");
+        return;
+      }
+
+      const decryptedRecord = await decrypt?.(clientRecord);
+      
+      const tx = await executeTransaction({
+        program: "freelancing_platform.aleo",
+        function: "deposit_funds",
+        inputs: [decryptedRecord || clientRecord, `${depositAmount}u64`],
+        fee: 100000,
+        privateFee: false,
+      });
+
+      if (tx?.transactionId) {
+        await pollTransaction(tx.transactionId);
+        
+        // Update Supabase
+        const supabase = createSupabaseClient();
+        await supabase.rpc('increment_balance', {
+          user_address: address,
+          amount: parseFloat(depositAmount)
+        });
+        
+        showNotification(`Successfully deposited ${depositAmount} ALEO!`);
+        setDepositAmount('');
+        loadUserStats();
+      }
+    } catch (error: any) {
+      console.error("Deposit error:", error);
+      showNotification(`Error: ${error.message}`);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const createEscrow = async (payee: string, amount: number, description: string) => {
     if (!executeTransaction || !address) return;
     
     setLoading(true);
     try {
-      // First check client balance
-      const clientRecords = await requestRecords?.("freelancing_platform.aleo", false);
-      const clientRecord = clientRecords?.find((r: any) => 
-        r.includes('owner') && r.includes(address)
+      // Get client record
+      const records = await requestRecords?.("freelancing_platform.aleo", false);
+      const clientRecord = records?.find((r: any) => 
+        typeof r === 'string' && r.includes('owner') && r.includes(address)
       );
       
       if (!clientRecord) {
@@ -210,7 +360,11 @@ export default function Home() {
         return;
       }
 
-      const milestoneAmounts = `[${amount/2}u64, ${amount/2}u64]`; // Even split for 2 milestones
+      const decryptedRecord = await decrypt?.(clientRecord);
+      
+      // Calculate milestone amounts (even split for 2 milestones)
+      const milestone1 = Math.floor(amount / 2);
+      const milestone2 = amount - milestone1;
       
       const tx = await executeTransaction({
         program: "freelancing_platform.aleo",
@@ -218,9 +372,9 @@ export default function Home() {
         inputs: [
           payee,
           `${amount}u64`,
-          milestoneAmounts,
+          `[${milestone1}u64, ${milestone2}u64]`,
           `"${description}"field`,
-          clientRecord
+          decryptedRecord || clientRecord
         ],
         fee: 200000,
         privateFee: false,
@@ -231,17 +385,42 @@ export default function Home() {
         
         // Store in Supabase
         const supabase = createSupabaseClient();
-        await supabase.from('escrows').insert({
-          client: address,
-          freelancer: payee,
-          amount: amount,
-          milestones: milestones,
+        const { data: escrowData } = await supabase.from('escrows').insert({
+          client_address: address,
+          freelancer_address: payee,
+          total_amount: amount,
+          remaining_amount: amount,
+          milestone_amounts: [milestone1, milestone2],
           description: description,
-          status: 'active'
-        });
+          status: 'active',
+          aleo_status: 0
+        }).select().single();
+        
+        if (escrowData) {
+          // Create transaction record
+          await supabase.from('transactions').insert({
+            transaction_id: tx.transactionId,
+            function_name: 'create_escrow',
+            caller_address: address,
+            related_addresses: [payee],
+            status: 'accepted',
+            inputs: JSON.stringify({ payee, amount, description }),
+            escrow_id: escrowData.id
+          });
+          
+          // Send notification to freelancer
+          await supabase.from('notifications').insert({
+            user_address: payee,
+            type: 'escrow_created',
+            title: 'New Escrow Created',
+            message: `You have been assigned to a new project: ${description}`,
+            related_escrow_id: escrowData.id
+          });
+        }
         
         showNotification("Escrow created successfully!");
         loadProjects();
+        loadUserStats();
       }
     } catch (error: any) {
       console.error("Create escrow error:", error);
@@ -256,17 +435,67 @@ export default function Home() {
     
     setLoading(true);
     try {
+      // Get escrow from database to get field ID
+      const supabase = createSupabaseClient();
+      const { data: escrow } = await supabase
+        .from('escrows')
+        .select('escrow_id_field')
+        .eq('id', escrowId)
+        .single();
+      
+      if (!escrow) {
+        showNotification("Escrow not found");
+        return;
+      }
+
       const tx = await executeTransaction({
         program: "freelancing_platform.aleo",
         function: "submit_milestone",
-        inputs: [`${escrowId}field`],
+        inputs: [`${escrow.escrow_id_field}field`],
         fee: 100000,
         privateFee: false,
       });
 
       if (tx?.transactionId) {
         await pollTransaction(tx.transactionId);
+        
+        // Update database
+        await supabase
+          .from('escrows')
+          .update({ current_milestone_submitted: true })
+          .eq('id', escrowId);
+        
+        // Create milestone submission record
+        await supabase.from('milestone_submissions').insert({
+          escrow_id: escrowId,
+          escrow_id_field: escrow.escrow_id_field,
+          milestone_number: 0, // This should be current milestone
+          submitter_address: address,
+          description: `Milestone submission for escrow ${escrowId}`,
+          status: 'submitted',
+          aleo_transaction_id: tx.transactionId,
+          is_on_chain: true
+        });
+        
+        // Send notification to client
+        const { data: escrowDetails } = await supabase
+          .from('escrows')
+          .select('client_address, description')
+          .eq('id', escrowId)
+          .single();
+        
+        if (escrowDetails) {
+          await supabase.from('notifications').insert({
+            user_address: escrowDetails.client_address,
+            type: 'milestone_submitted',
+            title: 'Milestone Submitted',
+            message: `A milestone has been submitted for project: ${escrowDetails.description}`,
+            related_escrow_id: escrowId
+          });
+        }
+        
         showNotification("Milestone submitted for review!");
+        loadProjects();
       }
     } catch (error: any) {
       console.error("Submit milestone error:", error);
@@ -276,18 +505,47 @@ export default function Home() {
     }
   };
 
-  const approveMilestone = async (escrowId: string, escrowRecord: string, freelancerRecord: string) => {
-    if (!executeTransaction) return;
+  const approveMilestone = async (escrowId: string) => {
+    if (!executeTransaction || !address) return;
     
     setLoading(true);
     try {
+      // Get necessary records from Aleo
+      const records = await requestRecords?.("freelancing_platform.aleo", false);
+      
+      // Find escrow record
+      const supabase = createSupabaseClient();
+      const { data: escrow } = await supabase
+        .from('escrows')
+        .select('*')
+        .eq('id', escrowId)
+        .single();
+      
+      if (!escrow) {
+        showNotification("Escrow not found");
+        return;
+      }
+
+      // Find freelancer record
+      const freelancerRecord = records?.find((r: any) => 
+        typeof r === 'string' && r.includes('owner') && r.includes(escrow.freelancer_address)
+      );
+      
+      if (!freelancerRecord) {
+        showNotification("Freelancer record not found");
+        return;
+      }
+
+      const decryptedEscrowRecord = await decrypt?.(escrow.aleo_escrow_record || '');
+      const decryptedFreelancerRecord = await decrypt?.(freelancerRecord);
+
       const tx = await executeTransaction({
         program: "freelancing_platform.aleo",
         function: "approve_and_release",
         inputs: [
-          `${escrowId}field`,
-          escrowRecord,
-          freelancerRecord
+          `${escrow.escrow_id_field}field`,
+          decryptedEscrowRecord || escrow.aleo_escrow_record || '',
+          decryptedFreelancerRecord || freelancerRecord
         ],
         fee: 150000,
         privateFee: false,
@@ -295,8 +553,52 @@ export default function Home() {
 
       if (tx?.transactionId) {
         await pollTransaction(tx.transactionId);
+        
+        // Update database
+        const nextMilestone = escrow.milestone + 1;
+        const isCompleted = nextMilestone >= escrow.total_milestones;
+        
+        await supabase
+          .from('escrows')
+          .update({
+            milestone: nextMilestone,
+            remaining_amount: escrow.remaining_amount - escrow.milestone_amounts[escrow.milestone],
+            current_milestone_submitted: false,
+            status: isCompleted ? 'completed' : 'active',
+            aleo_status: isCompleted ? 1 : 0,
+            completed_at: isCompleted ? new Date().toISOString() : null
+          })
+          .eq('id', escrowId);
+        
+        // Update freelancer balance
+        await supabase.rpc('increment_earned_balance', {
+          freelancer_address: escrow.freelancer_address,
+          amount: escrow.milestone_amounts[escrow.milestone]
+        });
+        
+        // Update milestone submission status
+        await supabase
+          .from('milestone_submissions')
+          .update({ 
+            status: 'approved',
+            approved_at: new Date().toISOString(),
+            approved_by: address
+          })
+          .eq('escrow_id', escrowId)
+          .eq('milestone_number', escrow.milestone);
+        
+        // Send notification to freelancer
+        await supabase.from('notifications').insert({
+          user_address: escrow.freelancer_address,
+          type: 'payment_released',
+          title: 'Payment Released',
+          message: `Payment of ${escrow.milestone_amounts[escrow.milestone]} ALEO has been released for your work`,
+          related_escrow_id: escrowId
+        });
+        
         showNotification("Milestone approved and funds released!");
         loadProjects();
+        loadUserStats();
       }
     } catch (error: any) {
       console.error("Approve milestone error:", error);
@@ -334,6 +636,16 @@ export default function Home() {
     setTimeout(() => setNotification(''), 5000);
   };
 
+  const addSkill = (skill: string) => {
+    if (skill && !registerSkills.includes(skill)) {
+      setRegisterSkills([...registerSkills, skill]);
+    }
+  };
+
+  const removeSkill = (skill: string) => {
+    setRegisterSkills(registerSkills.filter(s => s !== skill));
+  };
+
   return (
     <div className="relative min-h-screen overflow-hidden">
       {/* 3D Background */}
@@ -359,21 +671,23 @@ export default function Home() {
               </div>
               
               <div className="flex items-center space-x-4">
-                <nav className="hidden md:flex space-x-6">
-                  {['dashboard', 'projects', 'escrow', 'profile'].map((tab) => (
-                    <button
-                      key={tab}
-                      onClick={() => setActiveTab(tab as any)}
-                      className={`capitalize px-3 py-2 rounded-lg transition-all ${
-                        activeTab === tab 
-                          ? 'bg-gradient-to-r from-purple-600 to-blue-600' 
-                          : 'hover:bg-white/5'
-                      }`}
-                    >
-                      {tab}
-                    </button>
-                  ))}
-                </nav>
+                {connected && userRole && (
+                  <nav className="hidden md:flex space-x-2">
+                    {['dashboard', 'projects', 'create', 'profile'].map((tab) => (
+                      <button
+                        key={tab}
+                        onClick={() => setActiveTab(tab as any)}
+                        className={`capitalize px-4 py-2 rounded-lg transition-all ${
+                          activeTab === tab 
+                            ? 'bg-gradient-to-r from-purple-600 to-blue-600' 
+                            : 'hover:bg-white/5'
+                        }`}
+                      >
+                        {tab === 'create' ? (userRole === 'client' ? 'Create Project' : 'Find Work') : tab}
+                      </button>
+                    ))}
+                  </nav>
+                )}
                 <WalletConnect />
               </div>
             </div>
@@ -418,7 +732,7 @@ export default function Home() {
                   <h3 className="text-xl font-bold mb-2">Freelancer</h3>
                   <p className="text-gray-300 mb-4">Offer your skills with guaranteed payments</p>
                   <button
-                    onClick={() => registerAsFreelancer(['web3', 'frontend', 'smart-contracts'])}
+                    onClick={() => setShowRegisterModal(true)}
                     disabled={loading}
                     className="w-full py-3 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-lg font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
                   >
@@ -432,10 +746,10 @@ export default function Home() {
               {/* Dashboard */}
               {activeTab === 'dashboard' && (
                 <div className="space-y-8">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                     <StatsCard 
                       title="Total Balance"
-                      value={`${balance} ALEO`}
+                      value={`${userRole === 'client' ? '0' : userStats.totalEarned.toFixed(2)} ALEO`}
                       icon="💰"
                       trend="+12%"
                     />
@@ -446,27 +760,85 @@ export default function Home() {
                       trend="+3"
                     />
                     <StatsCard 
-                      title="Completion Rate"
-                      value="98%"
-                      icon="🎯"
-                      trend="+2%"
+                      title="Completed"
+                      value={userStats.completedProjects.toString()}
+                      icon="✅"
+                      trend="+5"
+                    />
+                    <StatsCard 
+                      title="Rating"
+                      value={userStats.rating.toFixed(1)}
+                      icon="⭐"
+                      trend="+0.2"
                     />
                   </div>
                   
                   <div className="grid lg:grid-cols-3 gap-8">
                     <GlassCard className="lg:col-span-2">
-                      <h3 className="text-xl font-bold mb-4">Recent Projects</h3>
+                      <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-xl font-bold">Recent Projects</h3>
+                        <button 
+                          onClick={() => setActiveTab('projects')}
+                          className="text-sm text-purple-400 hover:text-purple-300"
+                        >
+                          View All →
+                        </button>
+                      </div>
                       <div className="space-y-4">
                         {projects.slice(0, 3).map((project) => (
-                          <ProjectCard key={project.id} project={project} />
+                          <ProjectCard 
+                            key={project.id} 
+                            project={project}
+                            userRole={userRole}
+                            userAddress={address || ''}
+                            onMilestoneSubmit={submitMilestone}
+                            onMilestoneApprove={approveMilestone}
+                          />
                         ))}
+                        {projects.length === 0 && (
+                          <div className="text-center py-8 text-gray-400">
+                            No projects yet. {userRole === 'client' ? 'Create your first project!' : 'Start applying for projects!'}
+                          </div>
+                        )}
                       </div>
                     </GlassCard>
                     
-                    <GlassCard>
-                      <h3 className="text-xl font-bold mb-4">Top Skills</h3>
-                      <SkillsCloud />
-                    </GlassCard>
+                    <div className="space-y-6">
+                      <GlassCard>
+                        <h3 className="text-xl font-bold mb-4">Your Skills</h3>
+                        <SkillsCloud skills={userStats.skills} />
+                        {userRole === 'freelancer' && userStats.skills.length === 0 && (
+                          <button 
+                            onClick={() => setActiveTab('profile')}
+                            className="mt-4 w-full py-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors"
+                          >
+                            Add Skills
+                          </button>
+                        )}
+                      </GlassCard>
+                      
+                      {userRole === 'client' && (
+                        <GlassCard>
+                          <h3 className="text-xl font-bold mb-4">Deposit Funds</h3>
+                          <div className="space-y-4">
+                            <input
+                              type="number"
+                              value={depositAmount}
+                              onChange={(e) => setDepositAmount(e.target.value)}
+                              placeholder="Amount in ALEO"
+                              className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:border-purple-500"
+                            />
+                            <button
+                              onClick={handleDepositFunds}
+                              disabled={loading || !depositAmount}
+                              className="w-full py-3 bg-gradient-to-r from-purple-600 to-blue-600 rounded-lg font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
+                            >
+                              {loading ? 'Processing...' : 'Deposit Funds'}
+                            </button>
+                          </div>
+                        </GlassCard>
+                      )}
+                    </div>
                   </div>
                 </div>
               )}
@@ -475,36 +847,319 @@ export default function Home() {
               {activeTab === 'projects' && (
                 <GlassCard>
                   <div className="flex justify-between items-center mb-6">
-                    <h2 className="text-2xl font-bold">Project Management</h2>
+                    <h2 className="text-2xl font-bold">Your Projects</h2>
                     {userRole === 'client' && (
-                      <button className="px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 rounded-lg">
-                        + New Escrow
+                      <button 
+                        onClick={() => setActiveTab('create')}
+                        className="px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 rounded-lg hover:opacity-90 transition-opacity"
+                      >
+                        + New Project
                       </button>
                     )}
                   </div>
-                  {/* Project list and management UI */}
+                  
+                  <div className="space-y-4">
+                    {projects.map((project) => (
+                      <div key={project.id} className="glassmorphism-dark rounded-xl p-6">
+                        <div className="flex justify-between items-start mb-4">
+                          <div>
+                            <h4 className="text-lg font-semibold mb-2">{project.description}</h4>
+                            <div className="flex items-center space-x-4 text-sm text-gray-400">
+                              <span>Amount: {project.amount} ALEO</span>
+                              <span>•</span>
+                              <span>Status: <span className={`px-2 py-1 rounded-full text-xs ${
+                                project.status === 'active' ? 'bg-green-500/20 text-green-400' :
+                                project.status === 'completed' ? 'bg-blue-500/20 text-blue-400' :
+                                'bg-red-500/20 text-red-400'
+                              }`}>{project.status}</span></span>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <p className="text-sm text-gray-400">Milestone</p>
+                            <p className="font-bold">{project.currentMilestone}/{project.milestones}</p>
+                          </div>
+                        </div>
+                        
+                        <div className="flex justify-between items-center pt-4 border-t border-white/10">
+                          <div className="text-sm">
+                            <p className="text-gray-400">With:</p>
+                            <p className="font-mono">{userRole === 'client' ? project.freelancer : project.client}</p>
+                          </div>
+                          
+                          {project.status === 'active' && (
+                            <div className="space-x-2">
+                              {userRole === 'freelancer' && project.currentMilestone < project.milestones && !project.milestoneSubmitted && (
+                                <button
+                                  onClick={() => submitMilestone(project.id)}
+                                  disabled={loading}
+                                  className="px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-lg text-sm hover:opacity-90 disabled:opacity-50"
+                                >
+                                  Submit Milestone
+                                </button>
+                              )}
+                              {userRole === 'client' && project.milestoneSubmitted && (
+                                <button
+                                  onClick={() => approveMilestone(project.id)}
+                                  disabled={loading}
+                                  className="px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-600 rounded-lg text-sm hover:opacity-90 disabled:opacity-50"
+                                >
+                                  Approve & Pay
+                                </button>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                    
+                    {projects.length === 0 && (
+                      <div className="text-center py-12 text-gray-400">
+                        <div className="text-5xl mb-4">📋</div>
+                        <p className="text-lg mb-2">No projects yet</p>
+                        <p className="text-sm">Get started by {userRole === 'client' ? 'creating a project' : 'applying for available work'}</p>
+                      </div>
+                    )}
+                  </div>
                 </GlassCard>
               )}
               
-              {/* Create Escrow */}
-              {activeTab === 'escrow' && userRole === 'client' && (
-                <GlassCard className="max-w-2xl mx-auto">
-                  <h2 className="text-2xl font-bold mb-6">Create New Escrow</h2>
-                  {/* Escrow creation form */}
-                </GlassCard>
+              {/* Create Escrow / Find Work */}
+              {activeTab === 'create' && (
+                userRole === 'client' ? (
+                  <EscrowForm 
+                    onSubmit={createEscrow}
+                    loading={loading}
+                    userStats={userStats}
+                  />
+                ) : (
+                  <GlassCard>
+                    <h2 className="text-2xl font-bold mb-6">Available Projects</h2>
+                    <div className="text-center py-12 text-gray-400">
+                      <div className="text-5xl mb-4">🔍</div>
+                      <p className="text-lg mb-2">No available projects at the moment</p>
+                      <p className="text-sm">Check back later or update your skills to get matched with projects</p>
+                    </div>
+                  </GlassCard>
+                )
               )}
               
               {/* Profile */}
               {activeTab === 'profile' && (
-                <GlassCard>
-                  <h2 className="text-2xl font-bold mb-6">Your Profile</h2>
-                  {/* Profile management UI */}
-                </GlassCard>
+                <div className="grid lg:grid-cols-3 gap-8">
+                  <GlassCard className="lg:col-span-2">
+                    <h2 className="text-2xl font-bold mb-6">Your Profile</h2>
+                    
+                    <div className="space-y-6">
+                      <div>
+                        <h3 className="text-lg font-semibold mb-2">Wallet Address</h3>
+                        <p className="font-mono text-sm bg-white/5 p-3 rounded-lg">{address}</p>
+                      </div>
+                      
+                      <div>
+                        <h3 className="text-lg font-semibold mb-2">Role</h3>
+                        <div className={`inline-flex items-center px-4 py-2 rounded-full ${
+                          userRole === 'client' 
+                            ? 'bg-purple-500/20 text-purple-400' 
+                            : 'bg-blue-500/20 text-blue-400'
+                        }`}>
+                          <span className="mr-2">{userRole === 'client' ? '👔' : '💻'}</span>
+                          {userRole === 'client' ? 'Client' : 'Freelancer'}
+                        </div>
+                      </div>
+                      
+                      {userRole === 'freelancer' && (
+                        <div>
+                          <div className="flex justify-between items-center mb-4">
+                            <h3 className="text-lg font-semibold">Your Skills</h3>
+                            <button 
+                              onClick={() => setShowSkillsInput(!showSkillsInput)}
+                              className="text-sm text-purple-400 hover:text-purple-300"
+                            >
+                              + Add Skill
+                            </button>
+                          </div>
+                          
+                          {showSkillsInput && (
+                            <div className="mb-4">
+                              <input
+                                type="text"
+                                placeholder="Add a skill (e.g., React, Solidity)"
+                                className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg mb-2 focus:outline-none focus:border-purple-500"
+                                onKeyPress={(e) => {
+                                  if (e.key === 'Enter') {
+                                    addSkill((e.target as HTMLInputElement).value);
+                                    (e.target as HTMLInputElement).value = '';
+                                  }
+                                }}
+                              />
+                            </div>
+                          )}
+                          
+                          <div className="flex flex-wrap gap-2">
+                            {userStats.skills.map((skill, index) => (
+                              <div 
+                                key={index}
+                                className="flex items-center px-3 py-1 bg-white/10 rounded-full"
+                              >
+                                <span>{skill}</span>
+                                <button
+                                  onClick={() => removeSkill(skill)}
+                                  className="ml-2 text-gray-400 hover:text-white"
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            ))}
+                            {userStats.skills.length === 0 && (
+                              <p className="text-gray-400">No skills added yet</p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                      
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="bg-white/5 p-4 rounded-lg">
+                          <h4 className="text-sm text-gray-400 mb-1">Total Projects</h4>
+                          <p className="text-2xl font-bold">{userStats.totalProjects}</p>
+                        </div>
+                        <div className="bg-white/5 p-4 rounded-lg">
+                          <h4 className="text-sm text-gray-400 mb-1">Success Rate</h4>
+                          <p className="text-2xl font-bold">98%</p>
+                        </div>
+                      </div>
+                    </div>
+                  </GlassCard>
+                  
+                  <GlassCard>
+                    <h3 className="text-xl font-bold mb-4">Quick Actions</h3>
+                    <div className="space-y-3">
+                      {userRole === 'client' ? (
+                        <>
+                          <button 
+                            onClick={() => setActiveTab('create')}
+                            className="w-full px-4 py-3 bg-gradient-to-r from-purple-600 to-blue-600 rounded-lg text-left hover:opacity-90 transition-opacity"
+                          >
+                            <span className="font-semibold">Create New Project</span>
+                            <p className="text-sm text-white/70 mt-1">Start a new escrow with a freelancer</p>
+                          </button>
+                          <button 
+                            onClick={() => setDepositAmount('100')}
+                            className="w-full px-4 py-3 bg-white/10 rounded-lg text-left hover:bg-white/20 transition-colors"
+                          >
+                            <span className="font-semibold">Add Funds</span>
+                            <p className="text-sm text-white/70 mt-1">Deposit ALEO to your escrow balance</p>
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button 
+                            onClick={() => setActiveTab('create')}
+                            className="w-full px-4 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-lg text-left hover:opacity-90 transition-opacity"
+                          >
+                            <span className="font-semibold">Browse Projects</span>
+                            <p className="text-sm text-white/70 mt-1">Find available work opportunities</p>
+                          </button>
+                          <button 
+                            onClick={() => setShowSkillsInput(true)}
+                            className="w-full px-4 py-3 bg-white/10 rounded-lg text-left hover:bg-white/20 transition-colors"
+                          >
+                            <span className="font-semibold">Update Skills</span>
+                            <p className="text-sm text-white/70 mt-1">Add new skills to your profile</p>
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </GlassCard>
+                </div>
               )}
             </>
           )}
         </main>
       </div>
+
+      {/* Registration Modal */}
+      {showRegisterModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
+          <GlassCard className="max-w-md w-full mx-4">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-bold">Register as Freelancer</h3>
+              <button
+                onClick={() => setShowRegisterModal(false)}
+                className="text-gray-400 hover:text-white"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Your Skills (up to 5)</label>
+                <div className="flex flex-wrap gap-2 mb-3">
+                  {registerSkills.map((skill, index) => (
+                    <div 
+                      key={index}
+                      className="flex items-center px-3 py-1 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-full"
+                    >
+                      <span>{skill}</span>
+                      <button
+                        onClick={() => removeSkill(skill)}
+                        className="ml-2 text-white/70 hover:text-white"
+                      >
+                        ×
+                      </button>
+                    </div>
+                  ))}
+                </div>
+                <div className="flex space-x-2">
+                  <input
+                    type="text"
+                    placeholder="Add a skill (e.g., React, Solidity)"
+                    className="flex-1 px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:border-blue-500"
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        addSkill((e.target as HTMLInputElement).value);
+                        (e.target as HTMLInputElement).value = '';
+                      }
+                    }}
+                  />
+                  <button
+                    onClick={() => {
+                      const input = document.querySelector('input[type="text"]') as HTMLInputElement;
+                      if (input.value) {
+                        addSkill(input.value);
+                        input.value = '';
+                      }
+                    }}
+                    className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors"
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+              
+              <div className="text-sm text-gray-400">
+                <p>Popular skills: Web3, Frontend, Smart Contracts, Design, Marketing</p>
+              </div>
+              
+              <div className="flex space-x-3 pt-4">
+                <button
+                  onClick={() => setShowRegisterModal(false)}
+                  className="flex-1 px-4 py-3 bg-white/10 hover:bg-white/20 rounded-lg transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={registerAsFreelancer}
+                  disabled={loading}
+                  className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-lg font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
+                >
+                  {loading ? 'Registering...' : 'Complete Registration'}
+                </button>
+              </div>
+            </div>
+          </GlassCard>
+        </div>
+      )}
 
       {/* Notification Toast */}
       {notification && (
