@@ -11,7 +11,7 @@ import EscrowForm from "./components/EscrowForm";
 // import MilestoneSubmission from "./components/MilestoneSubmission";
 import * as THREE from "three";
 import { createSupabaseClient } from "./lib/supabase";
-import { Field } from "@aleohq/sdk";
+// import { Field } from "@aleohq/sdk";
 
 type UserRole = "client" | "freelancer" | null;
 type EscrowStatus = "active" | "completed" | "disputed";
@@ -273,17 +273,19 @@ export default function Home() {
     }
   };
 
-  const skillToField = (skill: string): string => {
-    const encoder = new TextEncoder();
-    const bytes = encoder.encode(skill);
-    const hex = Array.from(bytes)
-      .map((b) => b.toString(16).padStart(2, "0"))
-      .join("");
 
-    const fieldElement = Field.fromString(BigInt("0x" + hex).toString());
+const skillToField = (str:any) => {
+  if (!str || str.trim() === "") return "0field";
 
-    return fieldElement.toString();
-  };
+  const bytes = new TextEncoder().encode(str);
+
+  let bigIntValue = BigInt(0);
+  for (let i = 0; i < bytes.length; i++) {
+    bigIntValue |= BigInt(bytes[i]) << (BigInt(i) * BigInt(8));
+  }
+
+  return `${bigIntValue.toString()}field`;
+};
 
   const registerAsFreelancer = async () => {
     if (!executeTransaction || !address) return;

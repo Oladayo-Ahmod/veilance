@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "dev": "next dev ",
+    "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint"
   },
@@ -16,7 +16,6 @@
     "@provablehq/aleo-wallet-adaptor-react": "^0.3.0-alpha.2",
     "@provablehq/aleo-wallet-adaptor-react-ui": "^0.3.0-alpha.2",
     "@provablehq/aleo-wallet-adaptor-shield": "^0.3.0-alpha.2",
-    "@provablehq/sdk": "^0.9.15",
     "@supabase/supabase-js": "^2.93.3",
     "next": "16.1.6",
     "react": "19.2.3",
