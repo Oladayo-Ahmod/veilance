@@ -18,7 +18,7 @@ export default function WalletConnect() {
           boxShadow: '0 8px 32px rgba(102, 126, 234, 0.3)'
         }}
       />
-      {connected && address && (
+      {/* {connected && address && (
         <div className="absolute top-full mt-2 right-0 glassmorphism rounded-lg p-3 min-w-[200px] animate-in slide-in-from-top">
           <div className="text-xs text-gray-400 mb-1">Connected as</div>
           <div className="font-mono text-sm truncate">{address}</div>
@@ -29,7 +29,7 @@ export default function WalletConnect() {
             </div>
           </div>
         </div>
-      )}
+      )} */}
     </div>
   );
 }

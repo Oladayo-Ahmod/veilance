@@ -8,12 +8,13 @@ import StatsCard from "./components/StatsCard";
 import ProjectCard from "./components/ProjectCard";
 import SkillsCloud from "./components/SkillsCloud";
 import EscrowForm from "./components/EscrowForm";
-import MilestoneSubmission from "./components/MilestoneSubmission";
-import * as THREE from 'three';
+// import MilestoneSubmission from "./components/MilestoneSubmission";
+import * as THREE from "three";
 import { createSupabaseClient } from "./lib/supabase";
+import { Field } from "@aleohq/sdk";
 
-type UserRole = 'client' | 'freelancer' | null;
-type EscrowStatus = 'active' | 'completed' | 'disputed';
+type UserRole = "client" | "freelancer" | null;
+type EscrowStatus = "active" | "completed" | "disputed";
 type Skill = string;
 
 interface Escrow {
@@ -40,36 +41,50 @@ interface UserStats {
 }
 
 export default function Home() {
-  const { connected, address, executeTransaction, requestRecords, transactionStatus, decrypt } = useWallet();
+  const {
+    connected,
+    address,
+    executeTransaction,
+    requestRecords,
+    transactionStatus,
+    decrypt,
+  } = useWallet();
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  
+
   const [userRole, setUserRole] = useState<UserRole>(null);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'projects' | 'create' | 'profile'>('dashboard');
+  const [activeTab, setActiveTab] = useState<
+    "dashboard" | "projects" | "create" | "profile"
+  >("dashboard");
   const [userStats, setUserStats] = useState<UserStats>({
     totalProjects: 0,
     completedProjects: 0,
     totalEarned: 0,
     rating: 5.0,
-    skills: []
+    skills: [],
   });
   const [projects, setProjects] = useState<Escrow[]>([]);
   const [loading, setLoading] = useState(false);
-  const [notification, setNotification] = useState('');
+  const [notification, setNotification] = useState("");
   const [showRegisterModal, setShowRegisterModal] = useState(false);
   const [registerSkills, setRegisterSkills] = useState<Skill[]>([]);
   const [showSkillsInput, setShowSkillsInput] = useState(false);
-  const [depositAmount, setDepositAmount] = useState('');
-  
+  const [depositAmount, setDepositAmount] = useState("");
+
   // 3D Background Effect
   useEffect(() => {
     if (!canvasRef.current) return;
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    const renderer = new THREE.WebGLRenderer({ 
+    const camera = new THREE.PerspectiveCamera(
+      75,
+      window.innerWidth / window.innerHeight,
+      0.1,
+      1000,
+    );
+    const renderer = new THREE.WebGLRenderer({
       canvas: canvasRef.current,
       alpha: true,
-      antialias: true 
+      antialias: true,
     });
 
     renderer.setSize(window.innerWidth, window.innerHeight);
@@ -80,20 +95,26 @@ export default function Home() {
     const particlesCount = 500;
     const posArray = new Float32Array(particlesCount * 3);
 
-    for(let i = 0; i < particlesCount * 3; i++) {
+    for (let i = 0; i < particlesCount * 3; i++) {
       posArray[i] = (Math.random() - 0.5) * 10;
     }
 
-    particlesGeometry.setAttribute('position', new THREE.BufferAttribute(posArray, 3));
-    
+    particlesGeometry.setAttribute(
+      "position",
+      new THREE.BufferAttribute(posArray, 3),
+    );
+
     const particlesMaterial = new THREE.PointsMaterial({
       size: 0.02,
       color: 0x667eea,
       transparent: true,
-      opacity: 0.6
+      opacity: 0.6,
     });
 
-    const particlesMesh = new THREE.Points(particlesGeometry, particlesMaterial);
+    const particlesMesh = new THREE.Points(
+      particlesGeometry,
+      particlesMaterial,
+    );
     scene.add(particlesMesh);
 
     camera.position.z = 5;
@@ -113,10 +134,10 @@ export default function Home() {
       renderer.setSize(window.innerWidth, window.innerHeight);
     };
 
-    window.addEventListener('resize', handleResize);
+    window.addEventListener("resize", handleResize);
 
     return () => {
-      window.removeEventListener('resize', handleResize);
+      window.removeEventListener("resize", handleResize);
       renderer.dispose();
     };
   }, []);
@@ -134,15 +155,15 @@ export default function Home() {
     try {
       const supabase = createSupabaseClient();
       const { data } = await supabase
-        .from('users')
-        .select('role, skills')
-        .eq('address', address)
+        .from("users")
+        .select("role, skills")
+        .eq("address", address)
         .single();
-      
+
       if (data) {
         setUserRole(data.role);
         if (data.skills) {
-          setUserStats(prev => ({ ...prev, skills: data.skills }));
+          setUserStats((prev) => ({ ...prev, skills: data.skills }));
         }
       }
     } catch (error) {
@@ -152,16 +173,16 @@ export default function Home() {
 
   const loadProjects = async () => {
     if (!address) return;
-    
+
     const supabase = createSupabaseClient();
     const { data } = await supabase
-      .from('escrows')
-      .select('*')
+      .from("escrows")
+      .select("*")
       .or(`client_address.eq.${address},freelancer_address.eq.${address}`)
-      .order('created_at', { ascending: false });
-    
+      .order("created_at", { ascending: false });
+
     if (data) {
-      const formattedProjects = data.map(escrow => ({
+      const formattedProjects = data.map((escrow) => ({
         id: escrow.id,
         client: escrow.client_address,
         freelancer: escrow.freelancer_address,
@@ -171,9 +192,11 @@ export default function Home() {
         description: escrow.description,
         status: escrow.status,
         createdAt: escrow.created_at,
-        milestoneAmounts: escrow.milestone_amounts.map((a: string) => parseFloat(a)),
+        milestoneAmounts: escrow.milestone_amounts.map((a: string) =>
+          parseFloat(a),
+        ),
         remainingAmount: parseFloat(escrow.remaining_amount),
-        milestoneSubmitted: escrow.current_milestone_submitted
+        milestoneSubmitted: escrow.current_milestone_submitted,
       }));
       setProjects(formattedProjects);
     }
@@ -181,22 +204,30 @@ export default function Home() {
 
   const loadUserStats = async () => {
     if (!address || !userRole) return;
-    
+
     try {
       const supabase = createSupabaseClient();
       const { data } = await supabase
-        .from('users')
-        .select('*')
-        .eq('address', address)
+        .from("users")
+        .select("*")
+        .eq("address", address)
         .single();
-      
+
       if (data) {
         setUserStats({
-          totalProjects: userRole === 'client' ? data.completed_projects_as_client : data.completed_projects_as_freelancer,
-          completedProjects: userRole === 'client' ? data.completed_projects_as_client : data.completed_projects_as_freelancer,
-          totalEarned: parseFloat(data.earned_balance || '0'),
-          rating: parseFloat(userRole === 'client' ? data.client_rating : data.freelancer_rating),
-          skills: data.skills || []
+          totalProjects:
+            userRole === "client"
+              ? data.completed_projects_as_client
+              : data.completed_projects_as_freelancer,
+          completedProjects:
+            userRole === "client"
+              ? data.completed_projects_as_client
+              : data.completed_projects_as_freelancer,
+          totalEarned: parseFloat(data.earned_balance || "0"),
+          rating: parseFloat(
+            userRole === "client" ? data.client_rating : data.freelancer_rating,
+          ),
+          skills: data.skills || [],
         });
       }
     } catch (error) {
@@ -206,7 +237,7 @@ export default function Home() {
 
   const registerAsClient = async () => {
     if (!executeTransaction) return;
-    
+
     setLoading(true);
     try {
       const tx = await executeTransaction({
@@ -219,18 +250,18 @@ export default function Home() {
 
       if (tx?.transactionId) {
         await pollTransaction(tx.transactionId);
-        
+
         // Store in Supabase
         const supabase = createSupabaseClient();
-        await supabase.from('users').upsert({
+        await supabase.from("users").upsert({
           address: address,
-          role: 'client',
+          role: "client",
           client_rating: 0,
           completed_projects_as_client: 0,
-          escrow_balance: 0
+          escrow_balance: 0,
         });
-        
-        setUserRole('client');
+
+        setUserRole("client");
         showNotification("Successfully registered as client!");
         setShowRegisterModal(false);
       }
@@ -242,16 +273,33 @@ export default function Home() {
     }
   };
 
+  const skillToField = (skill: string): string => {
+    const encoder = new TextEncoder();
+    const bytes = encoder.encode(skill);
+    const hex = Array.from(bytes)
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+
+    const fieldElement = Field.fromString(BigInt("0x" + hex).toString());
+
+    return fieldElement.toString();
+  };
+
   const registerAsFreelancer = async () => {
     if (!executeTransaction || !address) return;
-    
+
     setLoading(true);
     try {
-      // Convert skills to field array format (max 5 skills)
       const skillsToUse = registerSkills.slice(0, 5);
-      const skillFields = skillsToUse.map(skill => `"${skill}"field`).join(',');
-      const skillInput = skillsToUse.length > 0 ? `[${skillFields}]` : `["web3"field, "development"field, "design"field, "marketing"field, "consulting"field]`;
-      
+
+      const skillFields = skillsToUse.map((skill) => skillToField(skill));
+ 
+      while (skillFields.length < 5) {
+        skillFields.push("0field");
+      }
+
+      const skillInput = `[${skillFields.join(",")}]`;
+
       const tx = await executeTransaction({
         program: "freelancing_platform.aleo",
         function: "register_freelancer",
@@ -262,29 +310,29 @@ export default function Home() {
 
       if (tx?.transactionId) {
         await pollTransaction(tx.transactionId);
-        
+
         // Store in Supabase
         const supabase = createSupabaseClient();
-        await supabase.from('users').upsert({
+        await supabase.from("users").upsert({
           address: address,
-          role: 'freelancer',
+          role: "freelancer",
           freelancer_rating: 5.0,
           completed_projects_as_freelancer: 0,
           earned_balance: 0,
-          skills: skillsToUse
+          skills: skillsToUse,
         });
-        
+
         // Store individual skills
         for (const skill of skillsToUse) {
-          await supabase.from('freelancer_skills').upsert({
+          await supabase.from("freelancer_skills").upsert({
             freelancer_address: address,
             skill: skill,
-            proficiency_level: 'intermediate'
+            proficiency_level: "intermediate",
           });
         }
-        
-        setUserRole('freelancer');
-        setUserStats(prev => ({ ...prev, skills: skillsToUse }));
+
+        setUserRole("freelancer");
+        setUserStats((prev) => ({ ...prev, skills: skillsToUse }));
         showNotification("Successfully registered as freelancer!");
         setShowRegisterModal(false);
       }
@@ -298,42 +346,52 @@ export default function Home() {
 
   const handleDepositFunds = async () => {
     if (!executeTransaction || !address || !depositAmount) return;
-    
     setLoading(true);
     try {
       // Get client record
-      const records = await requestRecords?.("freelancing_platform.aleo", false);
-      const clientRecord = records?.find((r: any) => 
-        typeof r === 'string' && r.includes('owner') && r.includes(address)
+      const records = await requestRecords?.(
+        "freelancing_platform.aleo",
+        false,
       );
-      
+      const clientRecord = records?.find(
+        (r: any) =>
+          typeof r === "string" && r.includes("owner") && r.includes(address),
+      );
+
       if (!clientRecord) {
-        showNotification("Client record not found. Please register as client first.");
+        showNotification(
+          "Client record not found. Please register as client first.",
+        );
         return;
       }
 
-      const decryptedRecord = await decrypt?.(clientRecord);
-      
+      const decryptedRecord = clientRecord
+        ? await decrypt?.(clientRecord as string)
+        : undefined;
+
       const tx = await executeTransaction({
         program: "freelancing_platform.aleo",
         function: "deposit_funds",
-        inputs: [decryptedRecord || clientRecord, `${depositAmount}u64`],
+        inputs: [
+          String(decryptedRecord || clientRecord as string),
+          `${depositAmount}u64`,
+        ],
         fee: 100000,
         privateFee: false,
       });
 
       if (tx?.transactionId) {
         await pollTransaction(tx.transactionId);
-        
+
         // Update Supabase
         const supabase = createSupabaseClient();
-        await supabase.rpc('increment_balance', {
+        await supabase.rpc("increment_balance", {
           user_address: address,
-          amount: parseFloat(depositAmount)
+          amount: parseFloat(depositAmount),
         });
-        
+
         showNotification(`Successfully deposited ${depositAmount} ALEO!`);
-        setDepositAmount('');
+        setDepositAmount("");
         loadUserStats();
       }
     } catch (error: any) {
@@ -344,28 +402,36 @@ export default function Home() {
     }
   };
 
-  const createEscrow = async (payee: string, amount: number, description: string) => {
+  const createEscrow = async (
+    payee: string,
+    amount: number,
+    description: string,
+  ) => {
     if (!executeTransaction || !address) return;
-    
+
     setLoading(true);
     try {
       // Get client record
-      const records = await requestRecords?.("freelancing_platform.aleo", false);
-      const clientRecord = records?.find((r: any) => 
-        typeof r === 'string' && r.includes('owner') && r.includes(address)
+      const records = await requestRecords?.(
+        "freelancing_platform.aleo",
+        false,
       );
-      
+      const clientRecord = records?.find(
+        (r: any) =>
+          typeof r === "string" && r.includes("owner") && r.includes(address),
+      );
+
       if (!clientRecord) {
         showNotification("Client record not found");
         return;
       }
 
-      const decryptedRecord = await decrypt?.(clientRecord);
-      
+      const decryptedRecord = await decrypt?.(clientRecord as string);
+
       // Calculate milestone amounts (even split for 2 milestones)
       const milestone1 = Math.floor(amount / 2);
       const milestone2 = amount - milestone1;
-      
+
       const tx = await executeTransaction({
         program: "freelancing_platform.aleo",
         function: "create_escrow",
@@ -374,7 +440,7 @@ export default function Home() {
           `${amount}u64`,
           `[${milestone1}u64, ${milestone2}u64]`,
           `"${description}"field`,
-          decryptedRecord || clientRecord
+          decryptedRecord || clientRecord as string,
         ],
         fee: 200000,
         privateFee: false,
@@ -382,42 +448,46 @@ export default function Home() {
 
       if (tx?.transactionId) {
         await pollTransaction(tx.transactionId);
-        
+
         // Store in Supabase
         const supabase = createSupabaseClient();
-        const { data: escrowData } = await supabase.from('escrows').insert({
-          client_address: address,
-          freelancer_address: payee,
-          total_amount: amount,
-          remaining_amount: amount,
-          milestone_amounts: [milestone1, milestone2],
-          description: description,
-          status: 'active',
-          aleo_status: 0
-        }).select().single();
-        
+        const { data: escrowData } = await supabase
+          .from("escrows")
+          .insert({
+            client_address: address,
+            freelancer_address: payee,
+            total_amount: amount,
+            remaining_amount: amount,
+            milestone_amounts: [milestone1, milestone2],
+            description: description,
+            status: "active",
+            aleo_status: 0,
+          })
+          .select()
+          .single();
+
         if (escrowData) {
           // Create transaction record
-          await supabase.from('transactions').insert({
+          await supabase.from("transactions").insert({
             transaction_id: tx.transactionId,
-            function_name: 'create_escrow',
+            function_name: "create_escrow",
             caller_address: address,
             related_addresses: [payee],
-            status: 'accepted',
+            status: "accepted",
             inputs: JSON.stringify({ payee, amount, description }),
-            escrow_id: escrowData.id
+            escrow_id: escrowData.id,
           });
-          
+
           // Send notification to freelancer
-          await supabase.from('notifications').insert({
+          await supabase.from("notifications").insert({
             user_address: payee,
-            type: 'escrow_created',
-            title: 'New Escrow Created',
+            type: "escrow_created",
+            title: "New Escrow Created",
             message: `You have been assigned to a new project: ${description}`,
-            related_escrow_id: escrowData.id
+            related_escrow_id: escrowData.id,
           });
         }
-        
+
         showNotification("Escrow created successfully!");
         loadProjects();
         loadUserStats();
@@ -432,17 +502,17 @@ export default function Home() {
 
   const submitMilestone = async (escrowId: string) => {
     if (!executeTransaction) return;
-    
+
     setLoading(true);
     try {
       // Get escrow from database to get field ID
       const supabase = createSupabaseClient();
       const { data: escrow } = await supabase
-        .from('escrows')
-        .select('escrow_id_field')
-        .eq('id', escrowId)
+        .from("escrows")
+        .select("escrow_id_field")
+        .eq("id", escrowId)
         .single();
-      
+
       if (!escrow) {
         showNotification("Escrow not found");
         return;
@@ -458,42 +528,42 @@ export default function Home() {
 
       if (tx?.transactionId) {
         await pollTransaction(tx.transactionId);
-        
+
         // Update database
         await supabase
-          .from('escrows')
+          .from("escrows")
           .update({ current_milestone_submitted: true })
-          .eq('id', escrowId);
-        
+          .eq("id", escrowId);
+
         // Create milestone submission record
-        await supabase.from('milestone_submissions').insert({
+        await supabase.from("milestone_submissions").insert({
           escrow_id: escrowId,
           escrow_id_field: escrow.escrow_id_field,
           milestone_number: 0, // This should be current milestone
           submitter_address: address,
           description: `Milestone submission for escrow ${escrowId}`,
-          status: 'submitted',
+          status: "submitted",
           aleo_transaction_id: tx.transactionId,
-          is_on_chain: true
+          is_on_chain: true,
         });
-        
+
         // Send notification to client
         const { data: escrowDetails } = await supabase
-          .from('escrows')
-          .select('client_address, description')
-          .eq('id', escrowId)
+          .from("escrows")
+          .select("client_address, description")
+          .eq("id", escrowId)
           .single();
-        
+
         if (escrowDetails) {
-          await supabase.from('notifications').insert({
+          await supabase.from("notifications").insert({
             user_address: escrowDetails.client_address,
-            type: 'milestone_submitted',
-            title: 'Milestone Submitted',
+            type: "milestone_submitted",
+            title: "Milestone Submitted",
             message: `A milestone has been submitted for project: ${escrowDetails.description}`,
-            related_escrow_id: escrowId
+            related_escrow_id: escrowId,
           });
         }
-        
+
         showNotification("Milestone submitted for review!");
         loadProjects();
       }
@@ -507,45 +577,55 @@ export default function Home() {
 
   const approveMilestone = async (escrowId: string) => {
     if (!executeTransaction || !address) return;
-    
+
     setLoading(true);
     try {
       // Get necessary records from Aleo
-      const records = await requestRecords?.("freelancing_platform.aleo", false);
-      
+      const records = await requestRecords?.(
+        "freelancing_platform.aleo",
+        false,
+      );
+
       // Find escrow record
       const supabase = createSupabaseClient();
       const { data: escrow } = await supabase
-        .from('escrows')
-        .select('*')
-        .eq('id', escrowId)
+        .from("escrows")
+        .select("*")
+        .eq("id", escrowId)
         .single();
-      
+
       if (!escrow) {
         showNotification("Escrow not found");
         return;
       }
 
       // Find freelancer record
-      const freelancerRecord = records?.find((r: any) => 
-        typeof r === 'string' && r.includes('owner') && r.includes(escrow.freelancer_address)
+      const freelancerRecord = records?.find(
+        (r: any) =>
+          typeof r === "string" &&
+          r.includes("owner") &&
+          r.includes(escrow.freelancer_address),
       );
-      
+
       if (!freelancerRecord) {
         showNotification("Freelancer record not found");
         return;
       }
 
-      const decryptedEscrowRecord = await decrypt?.(escrow.aleo_escrow_record || '');
-      const decryptedFreelancerRecord = await decrypt?.(freelancerRecord);
+      const decryptedEscrowRecord = escrow.aleo_escrow_record
+        ? await decrypt?.(escrow.aleo_escrow_record)
+        : undefined;
+      const decryptedFreelancerRecord = freelancerRecord
+        ? await decrypt?.(freelancerRecord as string)
+        : undefined;
 
       const tx = await executeTransaction({
         program: "freelancing_platform.aleo",
         function: "approve_and_release",
         inputs: [
           `${escrow.escrow_id_field}field`,
-          decryptedEscrowRecord || escrow.aleo_escrow_record || '',
-          decryptedFreelancerRecord || freelancerRecord
+          decryptedEscrowRecord || escrow.aleo_escrow_record || "",
+          decryptedFreelancerRecord || freelancerRecord,
         ],
         fee: 150000,
         privateFee: false,
@@ -553,49 +633,51 @@ export default function Home() {
 
       if (tx?.transactionId) {
         await pollTransaction(tx.transactionId);
-        
+
         // Update database
         const nextMilestone = escrow.milestone + 1;
         const isCompleted = nextMilestone >= escrow.total_milestones;
-        
+
         await supabase
-          .from('escrows')
+          .from("escrows")
           .update({
             milestone: nextMilestone,
-            remaining_amount: escrow.remaining_amount - escrow.milestone_amounts[escrow.milestone],
+            remaining_amount:
+              escrow.remaining_amount -
+              escrow.milestone_amounts[escrow.milestone],
             current_milestone_submitted: false,
-            status: isCompleted ? 'completed' : 'active',
+            status: isCompleted ? "completed" : "active",
             aleo_status: isCompleted ? 1 : 0,
-            completed_at: isCompleted ? new Date().toISOString() : null
+            completed_at: isCompleted ? new Date().toISOString() : null,
           })
-          .eq('id', escrowId);
-        
+          .eq("id", escrowId);
+
         // Update freelancer balance
-        await supabase.rpc('increment_earned_balance', {
+        await supabase.rpc("increment_earned_balance", {
           freelancer_address: escrow.freelancer_address,
-          amount: escrow.milestone_amounts[escrow.milestone]
+          amount: escrow.milestone_amounts[escrow.milestone],
         });
-        
+
         // Update milestone submission status
         await supabase
-          .from('milestone_submissions')
-          .update({ 
-            status: 'approved',
+          .from("milestone_submissions")
+          .update({
+            status: "approved",
             approved_at: new Date().toISOString(),
-            approved_by: address
+            approved_by: address,
           })
-          .eq('escrow_id', escrowId)
-          .eq('milestone_number', escrow.milestone);
-        
+          .eq("escrow_id", escrowId)
+          .eq("milestone_number", escrow.milestone);
+
         // Send notification to freelancer
-        await supabase.from('notifications').insert({
+        await supabase.from("notifications").insert({
           user_address: escrow.freelancer_address,
-          type: 'payment_released',
-          title: 'Payment Released',
+          type: "payment_released",
+          title: "Payment Released",
           message: `Payment of ${escrow.milestone_amounts[escrow.milestone]} ALEO has been released for your work`,
-          related_escrow_id: escrowId
+          related_escrow_id: escrowId,
         });
-        
+
         showNotification("Milestone approved and funds released!");
         loadProjects();
         loadUserStats();
@@ -614,10 +696,10 @@ export default function Home() {
         try {
           const status = await transactionStatus?.(txId);
           if (!status) return;
-          
-          if (status.status !== 'pending') {
+
+          if (status.status !== "pending") {
             clearInterval(interval);
-            if (status.status === 'accepted') {
+            if (status.status === "accepted") {
               resolve();
             } else {
               reject(new Error(`Transaction ${status.status}`));
@@ -633,7 +715,7 @@ export default function Home() {
 
   const showNotification = (message: string) => {
     setNotification(message);
-    setTimeout(() => setNotification(''), 5000);
+    setTimeout(() => setNotification(""), 5000);
   };
 
   const addSkill = (skill: string) => {
@@ -643,17 +725,17 @@ export default function Home() {
   };
 
   const removeSkill = (skill: string) => {
-    setRegisterSkills(registerSkills.filter(s => s !== skill));
+    setRegisterSkills(registerSkills.filter((s) => s !== skill));
   };
 
   return (
     <div className="relative min-h-screen overflow-hidden">
       {/* 3D Background */}
-      <canvas 
-        ref={canvasRef} 
+      <canvas
+        ref={canvasRef}
         className="fixed top-0 left-0 w-full h-full pointer-events-none"
       />
-      
+
       {/* Main Content */}
       <div className="relative z-10">
         {/* Header */}
@@ -669,23 +751,29 @@ export default function Home() {
                   Aleo Private Freelancing
                 </span>
               </div>
-              
+
               <div className="flex items-center space-x-4">
                 {connected && userRole && (
                   <nav className="hidden md:flex space-x-2">
-                    {['dashboard', 'projects', 'create', 'profile'].map((tab) => (
-                      <button
-                        key={tab}
-                        onClick={() => setActiveTab(tab as any)}
-                        className={`capitalize px-4 py-2 rounded-lg transition-all ${
-                          activeTab === tab 
-                            ? 'bg-gradient-to-r from-purple-600 to-blue-600' 
-                            : 'hover:bg-white/5'
-                        }`}
-                      >
-                        {tab === 'create' ? (userRole === 'client' ? 'Create Project' : 'Find Work') : tab}
-                      </button>
-                    ))}
+                    {["dashboard", "projects", "create", "profile"].map(
+                      (tab) => (
+                        <button
+                          key={tab}
+                          onClick={() => setActiveTab(tab as any)}
+                          className={`capitalize px-4 py-2 rounded-lg transition-all ${
+                            activeTab === tab
+                              ? "bg-gradient-to-r from-purple-600 to-blue-600"
+                              : "hover:bg-white/5"
+                          }`}
+                        >
+                          {tab === "create"
+                            ? userRole === "client"
+                              ? "Create Project"
+                              : "Find Work"
+                            : tab}
+                        </button>
+                      ),
+                    )}
                   </nav>
                 )}
                 <WalletConnect />
@@ -708,35 +796,41 @@ export default function Home() {
             </div>
           ) : !userRole ? (
             <GlassCard className="max-w-2xl mx-auto">
-              <h2 className="text-2xl font-bold mb-6 text-center">Choose Your Role</h2>
+              <h2 className="text-2xl font-bold mb-6 text-center">
+                Choose Your Role
+              </h2>
               <div className="grid md:grid-cols-2 gap-8">
                 <div className="text-center p-6 rounded-xl bg-gradient-to-br from-purple-900/30 to-blue-900/30 border border-purple-500/20">
                   <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-r from-purple-600 to-pink-600 flex items-center justify-center">
                     <span className="text-2xl">👔</span>
                   </div>
                   <h3 className="text-xl font-bold mb-2">Client</h3>
-                  <p className="text-gray-300 mb-4">Hire freelancers securely with private escrow</p>
+                  <p className="text-gray-300 mb-4">
+                    Hire freelancers securely with private escrow
+                  </p>
                   <button
                     onClick={registerAsClient}
                     disabled={loading}
                     className="w-full py-3 bg-gradient-to-r from-purple-600 to-blue-600 rounded-lg font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
                   >
-                    {loading ? 'Registering...' : 'Register as Client'}
+                    {loading ? "Registering..." : "Register as Client"}
                   </button>
                 </div>
-                
+
                 <div className="text-center p-6 rounded-xl bg-gradient-to-br from-blue-900/30 to-cyan-900/30 border border-blue-500/20">
                   <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gradient-to-r from-blue-600 to-cyan-600 flex items-center justify-center">
                     <span className="text-2xl">💻</span>
                   </div>
                   <h3 className="text-xl font-bold mb-2">Freelancer</h3>
-                  <p className="text-gray-300 mb-4">Offer your skills with guaranteed payments</p>
+                  <p className="text-gray-300 mb-4">
+                    Offer your skills with guaranteed payments
+                  </p>
                   <button
                     onClick={() => setShowRegisterModal(true)}
                     disabled={loading}
                     className="w-full py-3 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-lg font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
                   >
-                    {loading ? 'Registering...' : 'Register as Freelancer'}
+                    {loading ? "Registering..." : "Register as Freelancer"}
                   </button>
                 </div>
               </div>
@@ -744,41 +838,43 @@ export default function Home() {
           ) : (
             <>
               {/* Dashboard */}
-              {activeTab === 'dashboard' && (
+              {activeTab === "dashboard" && (
                 <div className="space-y-8">
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-                    <StatsCard 
+                    <StatsCard
                       title="Total Balance"
-                      value={`${userRole === 'client' ? '0' : userStats.totalEarned.toFixed(2)} ALEO`}
+                      value={`${userRole === "client" ? "0" : userStats.totalEarned.toFixed(2)} ALEO`}
                       icon="💰"
                       trend="+12%"
                     />
-                    <StatsCard 
+                    <StatsCard
                       title="Active Projects"
-                      value={projects.filter(p => p.status === 'active').length.toString()}
+                      value={projects
+                        .filter((p) => p.status === "active")
+                        .length.toString()}
                       icon="📊"
                       trend="+3"
                     />
-                    <StatsCard 
+                    <StatsCard
                       title="Completed"
                       value={userStats.completedProjects.toString()}
                       icon="✅"
                       trend="+5"
                     />
-                    <StatsCard 
+                    <StatsCard
                       title="Rating"
                       value={userStats.rating.toFixed(1)}
                       icon="⭐"
                       trend="+0.2"
                     />
                   </div>
-                  
+
                   <div className="grid lg:grid-cols-3 gap-8">
                     <GlassCard className="lg:col-span-2">
                       <div className="flex justify-between items-center mb-6">
                         <h3 className="text-xl font-bold">Recent Projects</h3>
-                        <button 
-                          onClick={() => setActiveTab('projects')}
+                        <button
+                          onClick={() => setActiveTab("projects")}
                           className="text-sm text-purple-400 hover:text-purple-300"
                         >
                           View All →
@@ -786,40 +882,46 @@ export default function Home() {
                       </div>
                       <div className="space-y-4">
                         {projects.slice(0, 3).map((project) => (
-                          <ProjectCard 
-                            key={project.id} 
+                          <ProjectCard
+                            key={project.id}
                             project={project}
                             userRole={userRole}
-                            userAddress={address || ''}
+                            userAddress={address || ""}
                             onMilestoneSubmit={submitMilestone}
                             onMilestoneApprove={approveMilestone}
                           />
                         ))}
                         {projects.length === 0 && (
                           <div className="text-center py-8 text-gray-400">
-                            No projects yet. {userRole === 'client' ? 'Create your first project!' : 'Start applying for projects!'}
+                            No projects yet.{" "}
+                            {userRole === "client"
+                              ? "Create your first project!"
+                              : "Start applying for projects!"}
                           </div>
                         )}
                       </div>
                     </GlassCard>
-                    
+
                     <div className="space-y-6">
                       <GlassCard>
                         <h3 className="text-xl font-bold mb-4">Your Skills</h3>
                         <SkillsCloud skills={userStats.skills} />
-                        {userRole === 'freelancer' && userStats.skills.length === 0 && (
-                          <button 
-                            onClick={() => setActiveTab('profile')}
-                            className="mt-4 w-full py-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors"
-                          >
-                            Add Skills
-                          </button>
-                        )}
+                        {userRole === "freelancer" &&
+                          userStats.skills.length === 0 && (
+                            <button
+                              onClick={() => setActiveTab("profile")}
+                              className="mt-4 w-full py-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors"
+                            >
+                              Add Skills
+                            </button>
+                          )}
                       </GlassCard>
-                      
-                      {userRole === 'client' && (
+
+                      {userRole === "client" && (
                         <GlassCard>
-                          <h3 className="text-xl font-bold mb-4">Deposit Funds</h3>
+                          <h3 className="text-xl font-bold mb-4">
+                            Deposit Funds
+                          </h3>
                           <div className="space-y-4">
                             <input
                               type="number"
@@ -833,7 +935,7 @@ export default function Home() {
                               disabled={loading || !depositAmount}
                               className="w-full py-3 bg-gradient-to-r from-purple-600 to-blue-600 rounded-lg font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
                             >
-                              {loading ? 'Processing...' : 'Deposit Funds'}
+                              {loading ? "Processing..." : "Deposit Funds"}
                             </button>
                           </div>
                         </GlassCard>
@@ -842,143 +944,189 @@ export default function Home() {
                   </div>
                 </div>
               )}
-              
+
               {/* Projects Management */}
-              {activeTab === 'projects' && (
+              {activeTab === "projects" && (
                 <GlassCard>
                   <div className="flex justify-between items-center mb-6">
                     <h2 className="text-2xl font-bold">Your Projects</h2>
-                    {userRole === 'client' && (
-                      <button 
-                        onClick={() => setActiveTab('create')}
+                    {userRole === "client" && (
+                      <button
+                        onClick={() => setActiveTab("create")}
                         className="px-4 py-2 bg-gradient-to-r from-purple-600 to-blue-600 rounded-lg hover:opacity-90 transition-opacity"
                       >
                         + New Project
                       </button>
                     )}
                   </div>
-                  
+
                   <div className="space-y-4">
                     {projects.map((project) => (
-                      <div key={project.id} className="glassmorphism-dark rounded-xl p-6">
+                      <div
+                        key={project.id}
+                        className="glassmorphism-dark rounded-xl p-6"
+                      >
                         <div className="flex justify-between items-start mb-4">
                           <div>
-                            <h4 className="text-lg font-semibold mb-2">{project.description}</h4>
+                            <h4 className="text-lg font-semibold mb-2">
+                              {project.description}
+                            </h4>
                             <div className="flex items-center space-x-4 text-sm text-gray-400">
                               <span>Amount: {project.amount} ALEO</span>
                               <span>•</span>
-                              <span>Status: <span className={`px-2 py-1 rounded-full text-xs ${
-                                project.status === 'active' ? 'bg-green-500/20 text-green-400' :
-                                project.status === 'completed' ? 'bg-blue-500/20 text-blue-400' :
-                                'bg-red-500/20 text-red-400'
-                              }`}>{project.status}</span></span>
+                              <span>
+                                Status:{" "}
+                                <span
+                                  className={`px-2 py-1 rounded-full text-xs ${
+                                    project.status === "active"
+                                      ? "bg-green-500/20 text-green-400"
+                                      : project.status === "completed"
+                                        ? "bg-blue-500/20 text-blue-400"
+                                        : "bg-red-500/20 text-red-400"
+                                  }`}
+                                >
+                                  {project.status}
+                                </span>
+                              </span>
                             </div>
                           </div>
                           <div className="text-right">
                             <p className="text-sm text-gray-400">Milestone</p>
-                            <p className="font-bold">{project.currentMilestone}/{project.milestones}</p>
+                            <p className="font-bold">
+                              {project.currentMilestone}/{project.milestones}
+                            </p>
                           </div>
                         </div>
-                        
+
                         <div className="flex justify-between items-center pt-4 border-t border-white/10">
                           <div className="text-sm">
                             <p className="text-gray-400">With:</p>
-                            <p className="font-mono">{userRole === 'client' ? project.freelancer : project.client}</p>
+                            <p className="font-mono">
+                              {userRole === "client"
+                                ? project.freelancer
+                                : project.client}
+                            </p>
                           </div>
-                          
-                          {project.status === 'active' && (
+
+                          {project.status === "active" && (
                             <div className="space-x-2">
-                              {userRole === 'freelancer' && project.currentMilestone < project.milestones && !project.milestoneSubmitted && (
-                                <button
-                                  onClick={() => submitMilestone(project.id)}
-                                  disabled={loading}
-                                  className="px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-lg text-sm hover:opacity-90 disabled:opacity-50"
-                                >
-                                  Submit Milestone
-                                </button>
-                              )}
-                              {userRole === 'client' && project.milestoneSubmitted && (
-                                <button
-                                  onClick={() => approveMilestone(project.id)}
-                                  disabled={loading}
-                                  className="px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-600 rounded-lg text-sm hover:opacity-90 disabled:opacity-50"
-                                >
-                                  Approve & Pay
-                                </button>
-                              )}
+                              {userRole === "freelancer" &&
+                                project.currentMilestone < project.milestones &&
+                                !project.milestoneSubmitted && (
+                                  <button
+                                    onClick={() => submitMilestone(project.id)}
+                                    disabled={loading}
+                                    className="px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-lg text-sm hover:opacity-90 disabled:opacity-50"
+                                  >
+                                    Submit Milestone
+                                  </button>
+                                )}
+                              {userRole === "client" &&
+                                project.milestoneSubmitted && (
+                                  <button
+                                    onClick={() => approveMilestone(project.id)}
+                                    disabled={loading}
+                                    className="px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-600 rounded-lg text-sm hover:opacity-90 disabled:opacity-50"
+                                  >
+                                    Approve & Pay
+                                  </button>
+                                )}
                             </div>
                           )}
                         </div>
                       </div>
                     ))}
-                    
+
                     {projects.length === 0 && (
                       <div className="text-center py-12 text-gray-400">
                         <div className="text-5xl mb-4">📋</div>
                         <p className="text-lg mb-2">No projects yet</p>
-                        <p className="text-sm">Get started by {userRole === 'client' ? 'creating a project' : 'applying for available work'}</p>
+                        <p className="text-sm">
+                          Get started by{" "}
+                          {userRole === "client"
+                            ? "creating a project"
+                            : "applying for available work"}
+                        </p>
                       </div>
                     )}
                   </div>
                 </GlassCard>
               )}
-              
+
               {/* Create Escrow / Find Work */}
-              {activeTab === 'create' && (
-                userRole === 'client' ? (
-                  <EscrowForm 
+              {activeTab === "create" &&
+                (userRole === "client" ? (
+                  <EscrowForm
                     onSubmit={createEscrow}
                     loading={loading}
                     userStats={userStats}
                   />
                 ) : (
                   <GlassCard>
-                    <h2 className="text-2xl font-bold mb-6">Available Projects</h2>
+                    <h2 className="text-2xl font-bold mb-6">
+                      Available Projects
+                    </h2>
                     <div className="text-center py-12 text-gray-400">
                       <div className="text-5xl mb-4">🔍</div>
-                      <p className="text-lg mb-2">No available projects at the moment</p>
-                      <p className="text-sm">Check back later or update your skills to get matched with projects</p>
+                      <p className="text-lg mb-2">
+                        No available projects at the moment
+                      </p>
+                      <p className="text-sm">
+                        Check back later or update your skills to get matched
+                        with projects
+                      </p>
                     </div>
                   </GlassCard>
-                )
-              )}
-              
+                ))}
+
               {/* Profile */}
-              {activeTab === 'profile' && (
+              {activeTab === "profile" && (
                 <div className="grid lg:grid-cols-3 gap-8">
                   <GlassCard className="lg:col-span-2">
                     <h2 className="text-2xl font-bold mb-6">Your Profile</h2>
-                    
+
                     <div className="space-y-6">
                       <div>
-                        <h3 className="text-lg font-semibold mb-2">Wallet Address</h3>
-                        <p className="font-mono text-sm bg-white/5 p-3 rounded-lg">{address}</p>
+                        <h3 className="text-lg font-semibold mb-2">
+                          Wallet Address
+                        </h3>
+                        <p className="font-mono text-sm bg-white/5 p-3 rounded-lg">
+                          {address}
+                        </p>
                       </div>
-                      
+
                       <div>
                         <h3 className="text-lg font-semibold mb-2">Role</h3>
-                        <div className={`inline-flex items-center px-4 py-2 rounded-full ${
-                          userRole === 'client' 
-                            ? 'bg-purple-500/20 text-purple-400' 
-                            : 'bg-blue-500/20 text-blue-400'
-                        }`}>
-                          <span className="mr-2">{userRole === 'client' ? '👔' : '💻'}</span>
-                          {userRole === 'client' ? 'Client' : 'Freelancer'}
+                        <div
+                          className={`inline-flex items-center px-4 py-2 rounded-full ${
+                            userRole === "client"
+                              ? "bg-purple-500/20 text-purple-400"
+                              : "bg-blue-500/20 text-blue-400"
+                          }`}
+                        >
+                          <span className="mr-2">
+                            {userRole === "client" ? "👔" : "💻"}
+                          </span>
+                          {userRole === "client" ? "Client" : "Freelancer"}
                         </div>
                       </div>
-                      
-                      {userRole === 'freelancer' && (
+
+                      {userRole === "freelancer" && (
                         <div>
                           <div className="flex justify-between items-center mb-4">
-                            <h3 className="text-lg font-semibold">Your Skills</h3>
-                            <button 
-                              onClick={() => setShowSkillsInput(!showSkillsInput)}
+                            <h3 className="text-lg font-semibold">
+                              Your Skills
+                            </h3>
+                            <button
+                              onClick={() =>
+                                setShowSkillsInput(!showSkillsInput)
+                              }
                               className="text-sm text-purple-400 hover:text-purple-300"
                             >
                               + Add Skill
                             </button>
                           </div>
-                          
+
                           {showSkillsInput && (
                             <div className="mb-4">
                               <input
@@ -986,18 +1134,20 @@ export default function Home() {
                                 placeholder="Add a skill (e.g., React, Solidity)"
                                 className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg mb-2 focus:outline-none focus:border-purple-500"
                                 onKeyPress={(e) => {
-                                  if (e.key === 'Enter') {
-                                    addSkill((e.target as HTMLInputElement).value);
-                                    (e.target as HTMLInputElement).value = '';
+                                  if (e.key === "Enter") {
+                                    addSkill(
+                                      (e.target as HTMLInputElement).value,
+                                    );
+                                    (e.target as HTMLInputElement).value = "";
                                   }
                                 }}
                               />
                             </div>
                           )}
-                          
+
                           <div className="flex flex-wrap gap-2">
                             {userStats.skills.map((skill, index) => (
-                              <div 
+                              <div
                                 key={index}
                                 className="flex items-center px-3 py-1 bg-white/10 rounded-full"
                               >
@@ -1011,60 +1161,80 @@ export default function Home() {
                               </div>
                             ))}
                             {userStats.skills.length === 0 && (
-                              <p className="text-gray-400">No skills added yet</p>
+                              <p className="text-gray-400">
+                                No skills added yet
+                              </p>
                             )}
                           </div>
                         </div>
                       )}
-                      
+
                       <div className="grid grid-cols-2 gap-4">
                         <div className="bg-white/5 p-4 rounded-lg">
-                          <h4 className="text-sm text-gray-400 mb-1">Total Projects</h4>
-                          <p className="text-2xl font-bold">{userStats.totalProjects}</p>
+                          <h4 className="text-sm text-gray-400 mb-1">
+                            Total Projects
+                          </h4>
+                          <p className="text-2xl font-bold">
+                            {userStats.totalProjects}
+                          </p>
                         </div>
                         <div className="bg-white/5 p-4 rounded-lg">
-                          <h4 className="text-sm text-gray-400 mb-1">Success Rate</h4>
+                          <h4 className="text-sm text-gray-400 mb-1">
+                            Success Rate
+                          </h4>
                           <p className="text-2xl font-bold">98%</p>
                         </div>
                       </div>
                     </div>
                   </GlassCard>
-                  
+
                   <GlassCard>
                     <h3 className="text-xl font-bold mb-4">Quick Actions</h3>
                     <div className="space-y-3">
-                      {userRole === 'client' ? (
+                      {userRole === "client" ? (
                         <>
-                          <button 
-                            onClick={() => setActiveTab('create')}
+                          <button
+                            onClick={() => setActiveTab("create")}
                             className="w-full px-4 py-3 bg-gradient-to-r from-purple-600 to-blue-600 rounded-lg text-left hover:opacity-90 transition-opacity"
                           >
-                            <span className="font-semibold">Create New Project</span>
-                            <p className="text-sm text-white/70 mt-1">Start a new escrow with a freelancer</p>
+                            <span className="font-semibold">
+                              Create New Project
+                            </span>
+                            <p className="text-sm text-white/70 mt-1">
+                              Start a new escrow with a freelancer
+                            </p>
                           </button>
-                          <button 
-                            onClick={() => setDepositAmount('100')}
+                          <button
+                            onClick={() => setDepositAmount("100")}
                             className="w-full px-4 py-3 bg-white/10 rounded-lg text-left hover:bg-white/20 transition-colors"
                           >
                             <span className="font-semibold">Add Funds</span>
-                            <p className="text-sm text-white/70 mt-1">Deposit ALEO to your escrow balance</p>
+                            <p className="text-sm text-white/70 mt-1">
+                              Deposit ALEO to your escrow balance
+                            </p>
                           </button>
                         </>
                       ) : (
                         <>
-                          <button 
-                            onClick={() => setActiveTab('create')}
+                          <button
+                            onClick={() => setActiveTab("create")}
                             className="w-full px-4 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-lg text-left hover:opacity-90 transition-opacity"
                           >
-                            <span className="font-semibold">Browse Projects</span>
-                            <p className="text-sm text-white/70 mt-1">Find available work opportunities</p>
+                            <span className="font-semibold">
+                              Browse Projects
+                            </span>
+                            <p className="text-sm text-white/70 mt-1">
+                              Find available work opportunities
+                            </p>
                           </button>
-                          <button 
+                          <button
                             onClick={() => setShowSkillsInput(true)}
                             className="w-full px-4 py-3 bg-white/10 rounded-lg text-left hover:bg-white/20 transition-colors"
                           >
                             <span className="font-semibold">Update Skills</span>
-                            <p className="text-sm text-white/70 mt-1">Add new skills to your profile</p>
+                            <p className="text-sm text-white/70 mt-1">
+                              Add new skills to your profile
+                            </p>
                           </button>
                         </>
                       )}
@@ -1090,13 +1260,15 @@ export default function Home() {
                 ✕
               </button>
             </div>
-            
+
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium mb-2">Your Skills (up to 5)</label>
+                <label className="block text-sm font-medium mb-2">
+                  Your Skills (up to 5)
+                </label>
                 <div className="flex flex-wrap gap-2 mb-3">
                   {registerSkills.map((skill, index) => (
-                    <div 
+                    <div
                       key={index}
                       className="flex items-center px-3 py-1 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-full"
                     >
@@ -1116,18 +1288,20 @@ export default function Home() {
                     placeholder="Add a skill (e.g., React, Solidity)"
                     className="flex-1 px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:border-blue-500"
                     onKeyPress={(e) => {
-                      if (e.key === 'Enter') {
+                      if (e.key === "Enter") {
                         addSkill((e.target as HTMLInputElement).value);
-                        (e.target as HTMLInputElement).value = '';
+                        (e.target as HTMLInputElement).value = "";
                       }
                     }}
                   />
                   <button
                     onClick={() => {
-                      const input = document.querySelector('input[type="text"]') as HTMLInputElement;
+                      const input = document.querySelector(
+                        'input[type="text"]',
+                      ) as HTMLInputElement;
                       if (input.value) {
                         addSkill(input.value);
-                        input.value = '';
+                        input.value = "";
                       }
                     }}
                     className="px-4 py-2 bg-white/10 hover:bg-white/20 rounded-lg transition-colors"
@@ -1136,11 +1310,14 @@ export default function Home() {
                   </button>
                 </div>
               </div>
-              
+
               <div className="text-sm text-gray-400">
-                <p>Popular skills: Web3, Frontend, Smart Contracts, Design, Marketing</p>
+                <p>
+                  Popular skills: Web3, Frontend, Smart Contracts, Design,
+                  Marketing
+                </p>
               </div>
-              
+
               <div className="flex space-x-3 pt-4">
                 <button
                   onClick={() => setShowRegisterModal(false)}
@@ -1153,7 +1330,7 @@ export default function Home() {
                   disabled={loading}
                   className="flex-1 px-4 py-3 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-lg font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
                 >
-                  {loading ? 'Registering...' : 'Complete Registration'}
+                  {loading ? "Registering..." : "Complete Registration"}
                 </button>
               </div>
             </div>
