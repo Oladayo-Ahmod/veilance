@@ -10,7 +10,7 @@ import SkillsCloud from "./components/SkillsCloud";
 import EscrowForm from "./components/EscrowForm";
 // import MilestoneSubmission from "./components/MilestoneSubmission";
 import * as THREE from "three";
-import { createSupabaseClient } from "./lib/supabase";
+import { createSupabaseClient,supabaseAnonKey,supabaseUrl } from "./lib/supabase";
 // import { Field } from "@aleohq/sdk";
 
 type UserRole = "client" | "freelancer" | null;
@@ -72,6 +72,7 @@ export default function Home() {
 
   // 3D Background Effect
   useEffect(() => {
+    // console.log(supabaseAnonKey,supabaseUrl)
     if (!canvasRef.current) return;
 
     const scene = new THREE.Scene();
@@ -287,64 +288,84 @@ const skillToField = (str:any) => {
   return `${bigIntValue.toString()}field`;
 };
 
-  const registerAsFreelancer = async () => {
-    if (!executeTransaction || !address) return;
+ const registerAsFreelancer = async () => {
+  if (!executeTransaction || !address) return;
 
-    setLoading(true);
-    try {
-      const skillsToUse = registerSkills.slice(0, 5);
+  setLoading(true);
 
-      const skillFields = skillsToUse.map((skill) => skillToField(skill));
- 
-      while (skillFields.length < 5) {
-        skillFields.push("0field");
-      }
+  const saveToDatabase = async (skills: string[]) => {
+    const supabase = createSupabaseClient();
+    
+    // Update main user record
+    await supabase.from("users").upsert({
+      address: address,
+      role: "freelancer",
+      freelancer_rating: 5.0,
+      completed_projects_as_freelancer: 0,
+      earned_balance: 0,
+      skills: skills,
+    });
 
-      const skillInput = `[${skillFields.join(",")}]`;
-
-      const tx = await executeTransaction({
-        program: "freelancing_platform.aleo",
-        function: "register_freelancer",
-        inputs: [skillInput],
-        fee: 100000,
-        privateFee: false,
+    // Update individual skills
+    for (const skill of skills) {
+      await supabase.from("freelancer_skills").upsert({
+        freelancer_address: address,
+        skill: skill,
+        proficiency_level: "intermediate",
       });
-
-      if (tx?.transactionId) {
-        await pollTransaction(tx.transactionId);
-
-        // Store in Supabase
-        const supabase = createSupabaseClient();
-        await supabase.from("users").upsert({
-          address: address,
-          role: "freelancer",
-          freelancer_rating: 5.0,
-          completed_projects_as_freelancer: 0,
-          earned_balance: 0,
-          skills: skillsToUse,
-        });
-
-        // Store individual skills
-        for (const skill of skillsToUse) {
-          await supabase.from("freelancer_skills").upsert({
-            freelancer_address: address,
-            skill: skill,
-            proficiency_level: "intermediate",
-          });
-        }
-
-        setUserRole("freelancer");
-        setUserStats((prev) => ({ ...prev, skills: skillsToUse }));
-        showNotification("Successfully registered as freelancer!");
-        setShowRegisterModal(false);
-      }
-    } catch (error: any) {
-      console.error("Registration error:", error);
-      showNotification(`Error: ${error.message}`);
-    } finally {
-      setLoading(false);
     }
+
+    setUserRole("freelancer");
+    setUserStats((prev) => ({ ...prev, skills }));
   };
+
+  try {
+    const skillsToUse = registerSkills.slice(0, 5);
+    const skillFields = skillsToUse.map((skill) => skillToField(skill));
+
+    while (skillFields.length < 5) {
+      skillFields.push("0field");
+    }
+
+    const skillInput = `[${skillFields.join(",")}]`;
+
+    const tx = await executeTransaction({
+      program: "freelancing_platform.aleo",
+      function: "register_freelancer",
+      inputs: [skillInput],
+      fee: 100000,
+      privateFee: false,
+    });
+
+    const txId = typeof tx === "string" ? tx : tx?.transactionId;
+
+    if (txId) {
+      console.log("Transaction Broadcasted:", txId);
+      await pollTransaction(txId);
+      await saveToDatabase(skillsToUse);
+      
+      showNotification("Successfully registered as freelancer!");
+      setShowRegisterModal(false);
+    }
+
+  } catch (error: any) {
+    const errorString = error?.message || String(error);
+
+    if (errorString.includes("Transaction Accepted") || errorString.includes("Accepted")) {
+      console.log("Transaction accepted via catch block");
+      
+      await saveToDatabase(registerSkills.slice(0, 5));
+      
+      showNotification("Registration submitted successfully!");
+      setShowRegisterModal(false);
+    } else {
+      console.error("Actual Registration Error:", error);
+      showNotification(`Error: ${errorString}`);
+    }
+  } finally {
+    setLoading(false);
+  }
+};
 
   const handleDepositFunds = async () => {
     if (!executeTransaction || !address || !depositAmount) return;
