@@ -514,7 +514,7 @@ const createEscrow = async (payee: string, amount: number, description: string) 
     const tx = await executeTransaction({
       program: "freelancing_platform.aleo",
       function: "create_escrow",
-      inputs: [payee, `${amount}u64`, `[${milestone1}u64, ${milestone2}u64]`, `"${description}"field`, decryptedRecord || clientRecord],
+      inputs: [payee, `${amount}u64`, `[${milestone1}u64, ${milestone2}u64]`, `"${description}"field`, String(decryptedRecord || clientRecord)],
       fee: 200000,
       privateFee: false,
     });
