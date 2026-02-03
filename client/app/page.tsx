@@ -59,7 +59,7 @@ export default function Home() {
     totalProjects: 0,
     completedProjects: 0,
     totalEarned: 0,
-    rating: 5.0,
+    rating: 0,
     skills: [],
   });
   const [projects, setProjects] = useState<Escrow[]>([]);
@@ -69,9 +69,11 @@ export default function Home() {
   const [registerSkills, setRegisterSkills] = useState<Skill[]>([]);
   const [showSkillsInput, setShowSkillsInput] = useState(false);
   const [depositAmount, setDepositAmount] = useState("");
+  const [loadingAction, setLoadingAction] = useState<string | null>(null);
 
   // 3D Background Effect
   useEffect(() => {
+    console.log(address,'add')
     // console.log(supabaseAnonKey,supabaseUrl)
     if (!canvasRef.current) return;
 
@@ -160,7 +162,6 @@ export default function Home() {
         .select("role, skills")
         .eq("address", address)
         .single();
-
       if (data) {
         setUserRole(data.role);
         if (data.skills) {
@@ -173,6 +174,7 @@ export default function Home() {
   };
 
   const loadProjects = async () => {
+
     if (!address) return;
 
     const supabase = createSupabaseClient();
@@ -203,43 +205,54 @@ export default function Home() {
     }
   };
 
-  const loadUserStats = async () => {
-    if (!address || !userRole) return;
+const loadUserStats = async () => {
+  if (!address) return;
 
-    try {
-      const supabase = createSupabaseClient();
-      const { data } = await supabase
-        .from("users")
-        .select("*")
-        .eq("address", address)
-        .single();
+  try {
+    const supabase = createSupabaseClient();
+    const { data, error } = await supabase
+      .from("users")
+      .select("*")
+      .eq("address", address)
+      .single();
 
-      if (data) {
-        setUserStats({
-          totalProjects:
-            userRole === "client"
-              ? data.completed_projects_as_client
-              : data.completed_projects_as_freelancer,
-          completedProjects:
-            userRole === "client"
-              ? data.completed_projects_as_client
-              : data.completed_projects_as_freelancer,
-          totalEarned: parseFloat(data.earned_balance || "0"),
-          rating: parseFloat(
-            userRole === "client" ? data.client_rating : data.freelancer_rating,
-          ),
-          skills: data.skills || [],
-        });
-      }
-    } catch (error) {
-      console.error("Error loading user stats:", error);
-    }
-  };
+      console.log(data)
+    if (error) throw error;
+    if (!data) return;
+
+    const effectiveRole = userRole || data.role; 
+
+    const escrowVal = parseFloat(data.escrow_balance ?? 0);
+    const earnedVal = parseFloat(data.earned_balance ?? 0);
+
+    const newStats = {
+      totalProjects: effectiveRole === "client" 
+        ? (data.completed_projects_as_client || 0) 
+        : (data.completed_projects_as_freelancer || 0),
+      
+      completedProjects: effectiveRole === "client" 
+        ? (data.completed_projects_as_client || 0) 
+        : (data.completed_projects_as_freelancer || 0),
+
+      totalEarned: effectiveRole === "client" ? escrowVal : earnedVal,
+
+      rating: parseFloat(
+        (effectiveRole === "client" ? data.client_rating : data.freelancer_rating) || 0
+      ),
+      skills: data.skills || [],
+    };
+
+    setUserStats(newStats);
+
+  } catch (error) {
+    console.error("Error loading user stats:", error);
+  }
+};
 
 const registerAsClient = async () => {
   if (!executeTransaction || !address) return;
 
-  setLoading(true);
+ setLoadingAction('register-client');
 
   const saveClientToDb = async () => {
     const supabase = createSupabaseClient();
@@ -289,7 +302,7 @@ const registerAsClient = async () => {
       showNotification(`Error: ${errorString}`);
     }
   } finally {
-    setLoading(false);
+    setLoadingAction(null);
   }
 };
 
@@ -404,30 +417,33 @@ const handleDepositFunds = async () => {
 
   try {
     const records = await requestRecords?.("freelancing_platform.aleo", false);
+    console.log(records)
+  const clientRecordObj = records?.find((r: any) => {
+    const isOwner = r.owner === address || r.sender === address;
+    const isClientRecord = r.recordName === "Client";
     
-    const clientRecord = records?.find(
-      (r: any) =>
-        typeof r === "string" && r.includes("owner") && r.includes(address)
-    );
+    return isOwner && isClientRecord && !r.spent;
+  }) as any;
 
-    if (!clientRecord) {
-      showNotification("Client record not found. Please register as client first.");
-      setLoading(false);
-      return;
-    }
+  if (!clientRecordObj) {
+    showNotification("Client record not found. Please register as client first.");
+    setLoading(false);
+    return;
+  }
 
-    const decryptedRecord = await decrypt?.(clientRecord as string);
+   const ciphertext = clientRecordObj.recordCiphertext;
+  const decryptedRecord = await decrypt?.(ciphertext);
 
-    const tx = await executeTransaction({
-      program: "freelancing_platform.aleo",
-      function: "deposit_funds",
-      inputs: [
-        String(decryptedRecord || clientRecord),
-        `${depositAmount}u64`,
-      ],
-      fee: 100000,
-      privateFee: false,
-    });
+  const tx = await executeTransaction({
+    program: "freelancing_platform.aleo",
+    function: "deposit_funds",
+    inputs: [
+      String(decryptedRecord || ciphertext), // Fallback to ciphertext if decrypt fails
+      `${depositAmount}u64`,
+    ],
+    fee: 100000,
+    privateFee: false,
+  });
 
     const txId = typeof tx === "string" ? tx : tx?.transactionId;
 
@@ -786,7 +802,7 @@ const approveMilestone = async (escrowId: string) => {
                     disabled={loading}
                     className="w-full py-3 bg-gradient-to-r from-purple-600 to-blue-600 rounded-lg font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
                   >
-                    {loading ? "Registering..." : "Register as Client"}
+                   {loadingAction === 'register-client' ? "Registering..." : "Register as Client"}
                   </button>
                 </div>
 
@@ -816,7 +832,7 @@ const approveMilestone = async (escrowId: string) => {
                   <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                     <StatsCard
                       title="Total Balance"
-                      value={`${userRole === "client" ? "0" : userStats.totalEarned.toFixed(2)} ALEO`}
+                      value={`${userStats.totalEarned.toFixed(2)} ALEO`}
                       icon="💰"
                       trend="+12%"
                     />
