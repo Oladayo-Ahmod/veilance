@@ -538,195 +538,130 @@ const createEscrow = async (payee: string, amount: number, description: string) 
   }
 };
 
-  const submitMilestone = async (escrowId: string) => {
-    if (!executeTransaction) return;
+const submitMilestone = async (escrowId: string) => {
+  if (!executeTransaction) return;
+  setLoading(true);
 
-    setLoading(true);
-    try {
-      // Get escrow from database to get field ID
-      const supabase = createSupabaseClient();
-      const { data: escrow } = await supabase
-        .from("escrows")
-        .select("escrow_id_field")
-        .eq("id", escrowId)
-        .single();
+  const updateMilestoneInDb = async (txId: string, escrowDetails: any) => {
+    const supabase = createSupabaseClient();
+    await supabase.from("escrows").update({ current_milestone_submitted: true }).eq("id", escrowId);
+    
+    await supabase.from("milestone_submissions").insert({
+      escrow_id: escrowId,
+      escrow_id_field: escrowDetails.escrow_id_field,
+      milestone_number: 0, 
+      submitter_address: address,
+      description: `Milestone submission for escrow ${escrowId}`,
+      status: "submitted",
+      aleo_transaction_id: txId,
+      is_on_chain: true,
+    });
 
-      if (!escrow) {
-        showNotification("Escrow not found");
-        return;
-      }
-
-      const tx = await executeTransaction({
-        program: "freelancing_platform.aleo",
-        function: "submit_milestone",
-        inputs: [`${escrow.escrow_id_field}field`],
-        fee: 100000,
-        privateFee: false,
-      });
-
-      if (tx?.transactionId) {
-        await pollTransaction(tx.transactionId);
-
-        // Update database
-        await supabase
-          .from("escrows")
-          .update({ current_milestone_submitted: true })
-          .eq("id", escrowId);
-
-        // Create milestone submission record
-        await supabase.from("milestone_submissions").insert({
-          escrow_id: escrowId,
-          escrow_id_field: escrow.escrow_id_field,
-          milestone_number: 0, // This should be current milestone
-          submitter_address: address,
-          description: `Milestone submission for escrow ${escrowId}`,
-          status: "submitted",
-          aleo_transaction_id: tx.transactionId,
-          is_on_chain: true,
-        });
-
-        // Send notification to client
-        const { data: escrowDetails } = await supabase
-          .from("escrows")
-          .select("client_address, description")
-          .eq("id", escrowId)
-          .single();
-
-        if (escrowDetails) {
-          await supabase.from("notifications").insert({
-            user_address: escrowDetails.client_address,
-            type: "milestone_submitted",
-            title: "Milestone Submitted",
-            message: `A milestone has been submitted for project: ${escrowDetails.description}`,
-            related_escrow_id: escrowId,
-          });
-        }
-
-        showNotification("Milestone submitted for review!");
-        loadProjects();
-      }
-    } catch (error: any) {
-      console.error("Submit milestone error:", error);
-      showNotification(`Error: ${error.message}`);
-    } finally {
-      setLoading(false);
-    }
+    await supabase.from("notifications").insert({
+      user_address: escrowDetails.client_address,
+      type: "milestone_submitted",
+      title: "Milestone Submitted",
+      message: `A milestone has been submitted for project: ${escrowDetails.description}`,
+      related_escrow_id: escrowId,
+    });
+    loadProjects();
   };
 
-  const approveMilestone = async (escrowId: string) => {
-    if (!executeTransaction || !address) return;
+  try {
+    const supabase = createSupabaseClient();
+    const { data: escrow } = await supabase.from("escrows").select("*").eq("id", escrowId).single();
+    if (!escrow) throw new Error("Escrow not found");
 
-    setLoading(true);
-    try {
-      // Get necessary records from Aleo
-      const records = await requestRecords?.(
-        "freelancing_platform.aleo",
-        false,
-      );
+    const tx = await executeTransaction({
+      program: "freelancing_platform.aleo",
+      function: "submit_milestone",
+      inputs: [`${escrow.escrow_id_field}field`],
+      fee: 100000,
+      privateFee: false,
+    });
 
-      // Find escrow record
-      const supabase = createSupabaseClient();
-      const { data: escrow } = await supabase
-        .from("escrows")
-        .select("*")
-        .eq("id", escrowId)
-        .single();
-
-      if (!escrow) {
-        showNotification("Escrow not found");
-        return;
-      }
-
-      // Find freelancer record
-      const freelancerRecord = records?.find(
-        (r: any) =>
-          typeof r === "string" &&
-          r.includes("owner") &&
-          r.includes(escrow.freelancer_address),
-      );
-
-      if (!freelancerRecord) {
-        showNotification("Freelancer record not found");
-        return;
-      }
-
-      const decryptedEscrowRecord = escrow.aleo_escrow_record
-        ? await decrypt?.(escrow.aleo_escrow_record)
-        : undefined;
-      const decryptedFreelancerRecord = freelancerRecord
-        ? await decrypt?.(freelancerRecord as string)
-        : undefined;
-
-      const tx = await executeTransaction({
-        program: "freelancing_platform.aleo",
-        function: "approve_and_release",
-        inputs: [
-          `${escrow.escrow_id_field}field`,
-          decryptedEscrowRecord || escrow.aleo_escrow_record || "",
-          decryptedFreelancerRecord || freelancerRecord,
-        ],
-        fee: 150000,
-        privateFee: false,
-      });
-
-      if (tx?.transactionId) {
-        await pollTransaction(tx.transactionId);
-
-        // Update database
-        const nextMilestone = escrow.milestone + 1;
-        const isCompleted = nextMilestone >= escrow.total_milestones;
-
-        await supabase
-          .from("escrows")
-          .update({
-            milestone: nextMilestone,
-            remaining_amount:
-              escrow.remaining_amount -
-              escrow.milestone_amounts[escrow.milestone],
-            current_milestone_submitted: false,
-            status: isCompleted ? "completed" : "active",
-            aleo_status: isCompleted ? 1 : 0,
-            completed_at: isCompleted ? new Date().toISOString() : null,
-          })
-          .eq("id", escrowId);
-
-        // Update freelancer balance
-        await supabase.rpc("increment_earned_balance", {
-          freelancer_address: escrow.freelancer_address,
-          amount: escrow.milestone_amounts[escrow.milestone],
-        });
-
-        // Update milestone submission status
-        await supabase
-          .from("milestone_submissions")
-          .update({
-            status: "approved",
-            approved_at: new Date().toISOString(),
-            approved_by: address,
-          })
-          .eq("escrow_id", escrowId)
-          .eq("milestone_number", escrow.milestone);
-
-        // Send notification to freelancer
-        await supabase.from("notifications").insert({
-          user_address: escrow.freelancer_address,
-          type: "payment_released",
-          title: "Payment Released",
-          message: `Payment of ${escrow.milestone_amounts[escrow.milestone]} ALEO has been released for your work`,
-          related_escrow_id: escrowId,
-        });
-
-        showNotification("Milestone approved and funds released!");
-        loadProjects();
-        loadUserStats();
-      }
-    } catch (error: any) {
-      console.error("Approve milestone error:", error);
-      showNotification(`Error: ${error.message}`);
-    } finally {
-      setLoading(false);
+    const txId = typeof tx === "string" ? tx : tx?.transactionId;
+    if (txId) {
+      await pollTransaction(txId);
+      await updateMilestoneInDb(txId, escrow);
+      showNotification("Milestone submitted!");
     }
+  } catch (error: any) {
+    const errorString = error?.message || String(error);
+    if (errorString.includes("Accepted")) {
+       const { data: escrow } = await createSupabaseClient().from("escrows").select("*").eq("id", escrowId).single();
+       if (escrow) await updateMilestoneInDb("accepted_tx", escrow);
+       showNotification("Milestone submission broadcasted!");
+    } else {
+      showNotification(`Error: ${errorString}`);
+    }
+  } finally {
+    setLoading(false);
+  }
+};
+const approveMilestone = async (escrowId: string) => {
+  if (!executeTransaction || !address) return;
+  setLoading(true);
+
+  const finalizeApprovalInDb = async (escrow: any) => {
+    const supabase = createSupabaseClient();
+    const nextMilestone = escrow.milestone + 1;
+    const isCompleted = nextMilestone >= escrow.total_milestones;
+
+    await supabase.from("escrows").update({
+      milestone: nextMilestone,
+      remaining_amount: escrow.remaining_amount - escrow.milestone_amounts[escrow.milestone],
+      current_milestone_submitted: false,
+      status: isCompleted ? "completed" : "active",
+      aleo_status: isCompleted ? 1 : 0,
+      completed_at: isCompleted ? new Date().toISOString() : null,
+    }).eq("id", escrowId);
+
+    await supabase.rpc("increment_earned_balance", {
+      freelancer_address: escrow.freelancer_address,
+      amount: escrow.milestone_amounts[escrow.milestone],
+    });
+
+    showNotification("Funds released!");
+    loadProjects();
+    loadUserStats();
   };
+
+  try {
+    const supabase = createSupabaseClient();
+    const { data: escrow } = await supabase.from("escrows").select("*").eq("id", escrowId).single();
+    if (!escrow) throw new Error("Escrow not found");
+
+    const records = await requestRecords?.("freelancing_platform.aleo", false);
+    const freelancerRecord = records?.find((r: any) => typeof r === "string" && r.includes(escrow.freelancer_address));
+    if (!freelancerRecord) throw new Error("Freelancer record not found");
+
+    const decEscrow = escrow.aleo_escrow_record ? await decrypt?.(escrow.aleo_escrow_record) : undefined;
+    const decFreelancer = await decrypt?.(freelancerRecord as string);
+
+    const tx = await executeTransaction({
+      program: "freelancing_platform.aleo",
+      function: "approve_and_release",
+      inputs: [`${escrow.escrow_id_field}field`, decEscrow || escrow.aleo_escrow_record || "", decFreelancer || freelancerRecord],
+      fee: 150000,
+      privateFee: false,
+    });
+
+    if (tx) {
+      await finalizeApprovalInDb(escrow);
+    }
+  } catch (error: any) {
+    const errorString = error?.message || String(error);
+    if (errorString.includes("Accepted")) {
+      const { data: escrow } = await createSupabaseClient().from("escrows").select("*").eq("id", escrowId).single();
+      if (escrow) await finalizeApprovalInDb(escrow);
+    } else {
+      showNotification(`Error: ${errorString}`);
+    }
+  } finally {
+    setLoading(false);
+  }
+};
 
   const pollTransaction = async (txId: string): Promise<void> => {
     return new Promise((resolve, reject) => {
