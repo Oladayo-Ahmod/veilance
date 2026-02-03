@@ -431,7 +431,7 @@ const handleDepositFunds = async () => {
     return;
   }
 
-   const ciphertext = clientRecordObj.recordCiphertext;
+   const ciphertext = (clientRecordObj as any)?.recordCiphertext;
   const decryptedRecord = await decrypt?.(ciphertext);
 
   const tx = await executeTransaction({
@@ -479,7 +479,7 @@ const createEscrow = async (payee: string, amount: number, description: string) 
     const milestone2 = amount - milestone1;
     const supabase = createSupabaseClient();
 
-    const { data: escrowData, error: escrowErr } = await supabase
+    const { data: escrowData } = await supabase
       .from("escrows")
       .insert({
         client_address: address,
@@ -494,7 +494,6 @@ const createEscrow = async (payee: string, amount: number, description: string) 
       .select().single();
 
     if (escrowData) {
-      // Log transaction and send notification
       await Promise.all([
         supabase.from("transactions").insert({
           transaction_id: txId,
@@ -520,17 +519,34 @@ const createEscrow = async (payee: string, amount: number, description: string) 
 
   try {
     const records = await requestRecords?.("freelancing_platform.aleo", false);
-    const clientRecord = records?.find((r: any) => typeof r === "string" && r.includes(address));
-    if (!clientRecord) throw new Error("Client record not found");
+    
+    const clientRecordObj = records?.find((r: any) => {
+      const isOwner = r.owner === address || r.sender === address || r.owner?.includes(address);
+      const isClientRecord = r.recordName === "Client";
+      return isOwner && isClientRecord && !r.spent;
+    });
 
-    const decryptedRecord = await decrypt?.(clientRecord as string);
+    if (!clientRecordObj) {
+      throw new Error("Client record not found. Please ensure you are registered.");
+    }
+
+    // Use recordCiphertext for decryption
+    const ciphertext = (clientRecordObj as any)?.recordCiphertext;
+    const decryptedRecord = await decrypt?.(ciphertext);
+
     const milestone1 = Math.floor(amount / 2);
     const milestone2 = amount - milestone1;
 
     const tx = await executeTransaction({
       program: "freelancing_platform.aleo",
       function: "create_escrow",
-      inputs: [payee, `${amount}u64`, `[${milestone1}u64, ${milestone2}u64]`, `"${description}"field`, String(decryptedRecord || clientRecord)],
+      inputs: [
+        payee, 
+        `${amount}u64`, 
+        `[${milestone1}u64, ${milestone2}u64]`, 
+        `"${description}"field`, 
+        String(decryptedRecord || ciphertext)
+      ],
       fee: 200000,
       privateFee: false,
     });
@@ -540,20 +556,21 @@ const createEscrow = async (payee: string, amount: number, description: string) 
       await pollTransaction(txId);
       await saveEscrowToDb(txId);
       showNotification("Escrow created successfully!");
+      setShowRegisterModal(false); 
     }
   } catch (error: any) {
     const errorString = error?.message || String(error);
     if (errorString.includes("Accepted")) {
-      await saveEscrowToDb("accepted_tx"); // Fallback ID if string parsing fails
+      await saveEscrowToDb("accepted_tx");
       showNotification("Escrow creation submitted!");
     } else {
+      console.error("Create escrow error:", error);
       showNotification(`Error: ${errorString}`);
     }
   } finally {
     setLoading(false);
   }
 };
-
 const submitMilestone = async (escrowId: string) => {
   if (!executeTransaction) return;
   setLoading(true);
