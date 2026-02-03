@@ -10,7 +10,7 @@ import SkillsCloud from "./components/SkillsCloud";
 import EscrowForm from "./components/EscrowForm";
 // import MilestoneSubmission from "./components/MilestoneSubmission";
 import * as THREE from "three";
-import { createSupabaseClient,supabaseAnonKey,supabaseUrl } from "./lib/supabase";
+import { createSupabaseClient } from "./lib/supabase";
 // import { Field } from "@aleohq/sdk";
 
 type UserRole = "client" | "freelancer" | null;
