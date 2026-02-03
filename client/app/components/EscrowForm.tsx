@@ -45,7 +45,7 @@ export default function EscrowForm({ onSubmit, loading, userStats }: EscrowFormP
                 required
               />
               <p className="text-sm text-gray-400 mt-1">
-                Enter the Aleo wallet address of the freelancer
+                Enter the Aleo wallet address of the freelancer. He must have registered as a freelancer.
               </p>
             </div>
             

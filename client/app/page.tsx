@@ -73,7 +73,7 @@ export default function Home() {
 
   // 3D Background Effect
   useEffect(() => {
-    console.log(address,'add')
+    console.log(address, 'add')
     // console.log(supabaseAnonKey,supabaseUrl)
     if (!canvasRef.current) return;
 
@@ -205,496 +205,507 @@ export default function Home() {
     }
   };
 
-const loadUserStats = async () => {
-  if (!address) return;
+  const loadUserStats = async () => {
+    if (!address) return;
 
-  try {
-    const supabase = createSupabaseClient();
-    const { data, error } = await supabase
-      .from("users")
-      .select("*")
-      .eq("address", address)
-      .single();
+    try {
+      const supabase = createSupabaseClient();
+      const { data, error } = await supabase
+        .from("users")
+        .select("*")
+        .eq("address", address)
+        .single();
 
       console.log(data)
-    if (error) throw error;
-    if (!data) return;
+      if (error) throw error;
+      if (!data) return;
 
-    const effectiveRole = userRole || data.role; 
+      const effectiveRole = userRole || data.role;
 
-    const escrowVal = parseFloat(data.escrow_balance ?? 0);
-    const earnedVal = parseFloat(data.earned_balance ?? 0);
+      const escrowVal = parseFloat(data.escrow_balance ?? 0);
+      const earnedVal = parseFloat(data.earned_balance ?? 0);
 
-    const newStats = {
-      totalProjects: effectiveRole === "client" 
-        ? (data.completed_projects_as_client || 0) 
-        : (data.completed_projects_as_freelancer || 0),
-      
-      completedProjects: effectiveRole === "client" 
-        ? (data.completed_projects_as_client || 0) 
-        : (data.completed_projects_as_freelancer || 0),
+      const newStats = {
+        totalProjects: effectiveRole === "client"
+          ? (data.completed_projects_as_client || 0)
+          : (data.completed_projects_as_freelancer || 0),
 
-      totalEarned: effectiveRole === "client" ? escrowVal : earnedVal,
+        completedProjects: effectiveRole === "client"
+          ? (data.completed_projects_as_client || 0)
+          : (data.completed_projects_as_freelancer || 0),
 
-      rating: parseFloat(
-        (effectiveRole === "client" ? data.client_rating : data.freelancer_rating) || 0
-      ),
-      skills: data.skills || [],
+        totalEarned: effectiveRole === "client" ? escrowVal : earnedVal,
+
+        rating: parseFloat(
+          (effectiveRole === "client" ? data.client_rating : data.freelancer_rating) || 0
+        ),
+        skills: data.skills || [],
+      };
+
+      setUserStats(newStats);
+
+    } catch (error) {
+      console.error("Error loading user stats:", error);
+    }
+  };
+
+  const registerAsClient = async () => {
+    if (!executeTransaction || !address) return;
+
+    setLoadingAction('register-client');
+
+    const saveClientToDb = async () => {
+      const supabase = createSupabaseClient();
+      const { error } = await supabase.from("users").upsert({
+        address: address,
+        role: "client",
+        client_rating: 0,
+        completed_projects_as_client: 0,
+        escrow_balance: 0,
+      });
+
+      if (error) throw error;
+
+      setUserRole("client");
     };
 
-    setUserStats(newStats);
-
-  } catch (error) {
-    console.error("Error loading user stats:", error);
-  }
-};
-
-const registerAsClient = async () => {
-  if (!executeTransaction || !address) return;
-
- setLoadingAction('register-client');
-
-  const saveClientToDb = async () => {
-    const supabase = createSupabaseClient();
-    const { error } = await supabase.from("users").upsert({
-      address: address,
-      role: "client",
-      client_rating: 0,
-      completed_projects_as_client: 0,
-      escrow_balance: 0,
-    });
-
-    if (error) throw error;
-
-    setUserRole("client");
-  };
-
-  try {
-    const tx = await executeTransaction({
-      program: "freelancing_platform.aleo",
-      function: "register_client",
-      inputs: [],
-      fee: 100000,
-      privateFee: false,
-    });
-
-    const txId = typeof tx === "string" ? tx : tx?.transactionId;
-
-    if (txId) {
-      await pollTransaction(txId);
-      await saveClientToDb();
-      
-      showNotification("Successfully registered as client!");
-      setShowRegisterModal(false);
-    }
-
-  } catch (error: any) {
-    const errorString = error?.message || String(error);
-
-    if (errorString.includes("Transaction Accepted") || errorString.includes("Accepted")) {
-      
-      await saveClientToDb();
-      
-      showNotification("Client registration submitted successfully!");
-      setShowRegisterModal(false);
-    } else {
-      console.error("Client Registration error:", error);
-      showNotification(`Error: ${errorString}`);
-    }
-  } finally {
-    setLoadingAction(null);
-  }
-};
-
-
-const skillToField = (str:any) => {
-  if (!str || str.trim() === "") return "0field";
-
-  const bytes = new TextEncoder().encode(str);
-
-  let bigIntValue = BigInt(0);
-  for (let i = 0; i < bytes.length; i++) {
-    bigIntValue |= BigInt(bytes[i]) << (BigInt(i) * BigInt(8));
-  }
-
-  return `${bigIntValue.toString()}field`;
-};
-
- const registerAsFreelancer = async () => {
-  if (!executeTransaction || !address) return;
-
-  setLoading(true);
-
-  const saveToDatabase = async (skills: string[]) => {
-    const supabase = createSupabaseClient();
-    
-    // Update main user record
-    await supabase.from("users").upsert({
-      address: address,
-      role: "freelancer",
-      freelancer_rating: 5.0,
-      completed_projects_as_freelancer: 0,
-      earned_balance: 0,
-      skills: skills,
-    });
-
-    // Update individual skills
-    for (const skill of skills) {
-      await supabase.from("freelancer_skills").upsert({
-        freelancer_address: address,
-        skill: skill,
-        proficiency_level: "intermediate",
+    try {
+      const tx = await executeTransaction({
+        program: "freelancing_platform.aleo",
+        function: "register_client",
+        inputs: [],
+        fee: 100000,
+        privateFee: false,
       });
-    }
 
-    setUserRole("freelancer");
-    setUserStats((prev) => ({ ...prev, skills }));
+      const txId = typeof tx === "string" ? tx : tx?.transactionId;
+
+      if (txId) {
+        await pollTransaction(txId);
+        await saveClientToDb();
+
+        showNotification("Successfully registered as client!");
+        setShowRegisterModal(false);
+      }
+
+    } catch (error: any) {
+      const errorString = error?.message || String(error);
+
+      if (errorString.includes("Transaction Accepted") || errorString.includes("Accepted")) {
+
+        await saveClientToDb();
+
+        showNotification("Client registration submitted successfully!");
+        setShowRegisterModal(false);
+      } else {
+        console.error("Client Registration error:", error);
+        showNotification(`Error: ${errorString}`);
+      }
+    } finally {
+      setLoadingAction(null);
+    }
   };
 
-  try {
-    const skillsToUse = registerSkills.slice(0, 5);
-    const skillFields = skillsToUse.map((skill) => skillToField(skill));
 
-    while (skillFields.length < 5) {
-      skillFields.push("0field");
+  const skillToField = (str: any) => {
+    if (!str || str.trim() === "") return "0field";
+
+    const bytes = new TextEncoder().encode(str);
+
+    let bigIntValue = BigInt(0);
+    for (let i = 0; i < bytes.length; i++) {
+      bigIntValue |= BigInt(bytes[i]) << (BigInt(i) * BigInt(8));
     }
 
-    const skillInput = `[${skillFields.join(",")}]`;
-
-    const tx = await executeTransaction({
-      program: "freelancing_platform.aleo",
-      function: "register_freelancer",
-      inputs: [skillInput],
-      fee: 100000,
-      privateFee: false,
-    });
-
-    const txId = typeof tx === "string" ? tx : tx?.transactionId;
-
-    if (txId) {
-      console.log("Transaction Broadcasted:", txId);
-      await pollTransaction(txId);
-      await saveToDatabase(skillsToUse);
-      
-      showNotification("Successfully registered as freelancer!");
-      setShowRegisterModal(false);
-    }
-
-  } catch (error: any) {
-    const errorString = error?.message || String(error);
-
-    if (errorString.includes("Transaction Accepted") || errorString.includes("Accepted")) {
-      console.log("Transaction accepted via catch block");
-      
-      await saveToDatabase(registerSkills.slice(0, 5));
-      
-      showNotification("Registration submitted successfully!");
-      setShowRegisterModal(false);
-    } else {
-      console.error("Actual Registration Error:", error);
-      showNotification(`Error: ${errorString}`);
-    }
-  } finally {
-    setLoading(false);
-  }
-};
-
-const handleDepositFunds = async () => {
-  if (!executeTransaction || !address || !depositAmount) return;
-  setLoading(true);
-
-  const updateSupabaseBalance = async (amount: string) => {
-    const supabase = createSupabaseClient();
-    const { error } = await supabase.rpc("increment_balance", {
-      user_address: address,
-      amount: parseFloat(amount),
-    });
-    if (error) throw error;
-    
-    setDepositAmount("");
-    loadUserStats();
+    return `${bigIntValue.toString()}field`;
   };
 
-  try {
-    const records = await requestRecords?.("freelancing_platform.aleo", false);
-    console.log(records)
-  const clientRecordObj = records?.find((r: any) => {
-    const isOwner = r.owner === address || r.sender === address;
-    const isClientRecord = r.recordName === "Client";
-    
-    return isOwner && isClientRecord && !r.spent;
-  }) as any;
+  const registerAsFreelancer = async () => {
+    if (!executeTransaction || !address) return;
 
-  if (!clientRecordObj) {
-    showNotification("Client record not found. Please register as client first.");
-    setLoading(false);
-    return;
-  }
+    setLoading(true);
 
-   const ciphertext = (clientRecordObj as any)?.recordCiphertext;
-  const decryptedRecord = await decrypt?.(ciphertext);
+    const saveToDatabase = async (skills: string[]) => {
+      const supabase = createSupabaseClient();
 
-  const tx = await executeTransaction({
-    program: "freelancing_platform.aleo",
-    function: "deposit_funds",
-    inputs: [
-      String(decryptedRecord || ciphertext), // Fallback to ciphertext if decrypt fails
-      `${depositAmount}u64`,
-    ],
-    fee: 100000,
-    privateFee: false,
-  });
+      // Update main user record
+      await supabase.from("users").upsert({
+        address: address,
+        role: "freelancer",
+        freelancer_rating: 5.0,
+        completed_projects_as_freelancer: 0,
+        earned_balance: 0,
+        skills: skills,
+      });
 
-    const txId = typeof tx === "string" ? tx : tx?.transactionId;
+      // Update individual skills
+      for (const skill of skills) {
+        await supabase.from("freelancer_skills").upsert({
+          freelancer_address: address,
+          skill: skill,
+          proficiency_level: "intermediate",
+        });
+      }
 
-    if (txId) {
-      await pollTransaction(txId);
-      await updateSupabaseBalance(depositAmount);
-      showNotification(`Successfully deposited ${depositAmount} ALEO!`);
+      setUserRole("freelancer");
+      setUserStats((prev) => ({ ...prev, skills }));
+    };
+
+    try {
+      const skillsToUse = registerSkills.slice(0, 5);
+      const skillFields = skillsToUse.map((skill) => skillToField(skill));
+
+      while (skillFields.length < 5) {
+        skillFields.push("0field");
+      }
+
+      const skillInput = `[${skillFields.join(",")}]`;
+
+      const tx = await executeTransaction({
+        program: "freelancing_platform.aleo",
+        function: "register_freelancer",
+        inputs: [skillInput],
+        fee: 100000,
+        privateFee: false,
+      });
+
+      const txId = typeof tx === "string" ? tx : tx?.transactionId;
+
+      if (txId) {
+        console.log("Transaction Broadcasted:", txId);
+        await pollTransaction(txId);
+        await saveToDatabase(skillsToUse);
+
+        showNotification("Successfully registered as freelancer!");
+        setShowRegisterModal(false);
+      }
+
+    } catch (error: any) {
+      const errorString = error?.message || String(error);
+
+      if (errorString.includes("Transaction Accepted") || errorString.includes("Accepted")) {
+        console.log("Transaction accepted via catch block");
+
+        await saveToDatabase(registerSkills.slice(0, 5));
+
+        showNotification("Registration submitted successfully!");
+        setShowRegisterModal(false);
+      } else {
+        console.error("Actual Registration Error:", error);
+        showNotification(`Error: ${errorString}`);
+      }
+    } finally {
+      setLoading(false);
     }
+  };
 
-  } catch (error: any) {
-    const errorString = error?.message || String(error);
+  const handleDepositFunds = async () => {
+    if (!executeTransaction || !address || !depositAmount) return;
+    setLoading(true);
 
-    if (errorString.includes("Transaction Accepted") || errorString.includes("Accepted")) {
-      console.log("Deposit accepted via catch block");
-      
-      await updateSupabaseBalance(depositAmount);
-      showNotification(`Deposit of ${depositAmount} ALEO submitted!`);
-    } else {
-      console.error("Deposit error:", error);
-      showNotification(`Error: ${errorString}`);
+    const updateSupabaseBalance = async (amount: string) => {
+      const supabase = createSupabaseClient();
+      const { error } = await supabase.rpc("increment_balance", {
+        user_address: address,
+        amount: parseFloat(amount),
+      });
+      if (error) throw error;
+
+      setDepositAmount("");
+      loadUserStats();
+    };
+
+    try {
+      const records = await requestRecords?.("freelancing_platform.aleo", false);
+      console.log(records)
+      const clientRecordObj = records?.find((r: any) => {
+        const isOwner = r.owner === address || r.sender === address;
+        const isClientRecord = r.recordName === "Client";
+
+        return isOwner && isClientRecord && !r.spent;
+      }) as any;
+
+      if (!clientRecordObj) {
+        showNotification("Client record not found. Please register as client first.");
+        setLoading(false);
+        return;
+      }
+
+      const ciphertext = (clientRecordObj as any)?.recordCiphertext;
+      const decryptedRecord = await decrypt?.(ciphertext);
+
+      const tx = await executeTransaction({
+        program: "freelancing_platform.aleo",
+        function: "deposit_funds",
+        inputs: [
+          String(decryptedRecord || ciphertext), // Fallback to ciphertext if decrypt fails
+          `${depositAmount}u64`,
+        ],
+        fee: 100000,
+        privateFee: false,
+      });
+
+      const txId = typeof tx === "string" ? tx : tx?.transactionId;
+
+      if (txId) {
+        await pollTransaction(txId);
+        await updateSupabaseBalance(depositAmount);
+        showNotification(`Successfully deposited ${depositAmount} ALEO!`);
+      }
+
+    } catch (error: any) {
+      const errorString = error?.message || String(error);
+
+      if (errorString.includes("Transaction Accepted") || errorString.includes("Accepted")) {
+        console.log("Deposit accepted via catch block");
+
+        await updateSupabaseBalance(depositAmount);
+        showNotification(`Deposit of ${depositAmount} ALEO submitted!`);
+      } else {
+        console.error("Deposit error:", error);
+        showNotification(`Error: ${errorString}`);
+      }
+    } finally {
+      setLoading(false);
     }
-  } finally {
-    setLoading(false);
-  }
+  };
+
+  const stringToField = (str: string) => {
+  const truncated = str.slice(0, 31);
+  
+  const hex = Buffer.from(truncated, 'utf8').toString('hex');
+  
+  return BigInt("0x" + hex).toString() + "field";
 };
 
-const createEscrow = async (payee: string, amount: number, description: string) => {
-  if (!executeTransaction || !address) return;
-  setLoading(true);
+  const createEscrow = async (payee: string, amount: number, description: string) => {
+    if (!executeTransaction || !address) return;
+    setLoading(true);
 
-  const saveEscrowToDb = async (txId: string) => {
-    const milestone1 = Math.floor(amount / 2);
-    const milestone2 = amount - milestone1;
-    const supabase = createSupabaseClient();
+    const saveEscrowToDb = async (txId: string) => {
+      const milestone1 = Math.floor(amount / 2);
+      const milestone2 = amount - milestone1;
+      const supabase = createSupabaseClient();
 
-    const { data: escrowData } = await supabase
-      .from("escrows")
-      .insert({
-        client_address: address,
-        freelancer_address: payee,
-        total_amount: amount,
-        remaining_amount: amount,
-        milestone_amounts: [milestone1, milestone2],
-        description: description,
-        status: "active",
-        aleo_status: 0,
-      })
-      .select().single();
-
-    if (escrowData) {
-      await Promise.all([
-        supabase.from("transactions").insert({
-          transaction_id: txId,
-          function_name: "create_escrow",
-          caller_address: address,
-          related_addresses: [payee],
-          status: "accepted",
-          inputs: JSON.stringify({ payee, amount, description }),
-          escrow_id: escrowData.id,
-        }),
-        supabase.from("notifications").insert({
-          user_address: payee,
-          type: "escrow_created",
-          title: "New Escrow Created",
-          message: `You have been assigned to a new project: ${description}`,
-          related_escrow_id: escrowData.id,
+      const { data: escrowData } = await supabase
+        .from("escrows")
+        .insert({
+          client_address: address,
+          freelancer_address: payee,
+          total_amount: amount,
+          remaining_amount: amount,
+          milestone_amounts: [milestone1, milestone2],
+          description: description,
+          status: "active",
+          aleo_status: 0,
         })
-      ]);
+        .select().single();
+
+      if (escrowData) {
+        await Promise.all([
+          supabase.from("transactions").insert({
+            transaction_id: txId,
+            function_name: "create_escrow",
+            caller_address: address,
+            related_addresses: [payee],
+            status: "accepted",
+            inputs: JSON.stringify({ payee, amount, description }),
+            escrow_id: escrowData.id,
+          }),
+          supabase.from("notifications").insert({
+            user_address: payee,
+            type: "escrow_created",
+            title: "New Escrow Created",
+            message: `You have been assigned to a new project: ${description}`,
+            related_escrow_id: escrowData.id,
+          })
+        ]);
+      }
+      loadProjects();
+      loadUserStats();
+    };
+
+    try {
+      const records = await requestRecords?.("freelancing_platform.aleo", false);
+      console.log(records)
+      const clientRecordObj = records?.find((r: any) => {
+        const isOwner = r.owner === address || r.sender === address || r.owner?.includes(address);
+        const isClientRecord = r.recordName === "Client";
+        return isOwner && isClientRecord && !r.spent;
+      });
+
+      console.log(clientRecordObj, 'clientRecordObj')
+      if (!clientRecordObj) {
+        throw new Error("Client record not found. Please ensure you are registered.");
+      }
+
+      // Use recordCiphertext for decryption
+      const ciphertext = (clientRecordObj as any)?.recordCiphertext;
+      const decryptedRecord = await decrypt?.(ciphertext);
+
+      const milestone1 = Math.floor(amount / 2);
+      const milestone2 = amount - milestone1;
+      const milestoneInput = `[${milestone1}u64,${milestone2}u64]`;
+      console.log(description)
+
+      const tx = await executeTransaction({
+        program: "freelancing_platform.aleo",
+        function: "create_escrow",
+        inputs: [
+          payee,
+          `${amount}u64`,
+          milestoneInput,
+          stringToField(description),
+          String(decryptedRecord || ciphertext)
+        ],
+        fee: 200000,
+        privateFee: false,
+      });
+
+      const txId = typeof tx === "string" ? tx : tx?.transactionId;
+      if (txId) {
+        await pollTransaction(txId);
+        await saveEscrowToDb(txId);
+        showNotification("Escrow created successfully!");
+        setShowRegisterModal(false);
+      }
+    } catch (error: any) {
+      const errorString = error?.message || String(error);
+      if (errorString.includes("Accepted")) {
+        await saveEscrowToDb("accepted_tx");
+        showNotification("Escrow creation submitted!");
+      } else {
+        console.error("Create escrow error:", error);
+        showNotification(`Error: ${errorString}`);
+      }
+    } finally {
+      setLoading(false);
     }
-    loadProjects();
-    loadUserStats();
   };
+  const submitMilestone = async (escrowId: string) => {
+    if (!executeTransaction) return;
+    setLoading(true);
 
-  try {
-    const records = await requestRecords?.("freelancing_platform.aleo", false);
-    
-    const clientRecordObj = records?.find((r: any) => {
-      const isOwner = r.owner === address || r.sender === address || r.owner?.includes(address);
-      const isClientRecord = r.recordName === "Client";
-      return isOwner && isClientRecord && !r.spent;
-    });
+    const updateMilestoneInDb = async (txId: string, escrowDetails: any) => {
+      const supabase = createSupabaseClient();
+      await supabase.from("escrows").update({ current_milestone_submitted: true }).eq("id", escrowId);
 
-    if (!clientRecordObj) {
-      throw new Error("Client record not found. Please ensure you are registered.");
+      await supabase.from("milestone_submissions").insert({
+        escrow_id: escrowId,
+        escrow_id_field: escrowDetails.escrow_id_field,
+        milestone_number: 0,
+        submitter_address: address,
+        description: `Milestone submission for escrow ${escrowId}`,
+        status: "submitted",
+        aleo_transaction_id: txId,
+        is_on_chain: true,
+      });
+
+      await supabase.from("notifications").insert({
+        user_address: escrowDetails.client_address,
+        type: "milestone_submitted",
+        title: "Milestone Submitted",
+        message: `A milestone has been submitted for project: ${escrowDetails.description}`,
+        related_escrow_id: escrowId,
+      });
+      loadProjects();
+    };
+
+    try {
+      const supabase = createSupabaseClient();
+      const { data: escrow } = await supabase.from("escrows").select("*").eq("id", escrowId).single();
+      if (!escrow) throw new Error("Escrow not found");
+
+      const tx = await executeTransaction({
+        program: "freelancing_platform.aleo",
+        function: "submit_milestone",
+        inputs: [`${escrow.escrow_id_field}field`],
+        fee: 100000,
+        privateFee: false,
+      });
+
+      const txId = typeof tx === "string" ? tx : tx?.transactionId;
+      if (txId) {
+        await pollTransaction(txId);
+        await updateMilestoneInDb(txId, escrow);
+        showNotification("Milestone submitted!");
+      }
+    } catch (error: any) {
+      const errorString = error?.message || String(error);
+      if (errorString.includes("Accepted")) {
+        const { data: escrow } = await createSupabaseClient().from("escrows").select("*").eq("id", escrowId).single();
+        if (escrow) await updateMilestoneInDb("accepted_tx", escrow);
+        showNotification("Milestone submission broadcasted!");
+      } else {
+        showNotification(`Error: ${errorString}`);
+      }
+    } finally {
+      setLoading(false);
     }
-
-    // Use recordCiphertext for decryption
-    const ciphertext = (clientRecordObj as any)?.recordCiphertext;
-    const decryptedRecord = await decrypt?.(ciphertext);
-
-    const milestone1 = Math.floor(amount / 2);
-    const milestone2 = amount - milestone1;
-
-    const tx = await executeTransaction({
-      program: "freelancing_platform.aleo",
-      function: "create_escrow",
-      inputs: [
-        payee, 
-        `${amount}u64`, 
-        `[${milestone1}u64, ${milestone2}u64]`, 
-        `"${description}"field`, 
-        String(decryptedRecord || ciphertext)
-      ],
-      fee: 200000,
-      privateFee: false,
-    });
-
-    const txId = typeof tx === "string" ? tx : tx?.transactionId;
-    if (txId) {
-      await pollTransaction(txId);
-      await saveEscrowToDb(txId);
-      showNotification("Escrow created successfully!");
-      setShowRegisterModal(false); 
-    }
-  } catch (error: any) {
-    const errorString = error?.message || String(error);
-    if (errorString.includes("Accepted")) {
-      await saveEscrowToDb("accepted_tx");
-      showNotification("Escrow creation submitted!");
-    } else {
-      console.error("Create escrow error:", error);
-      showNotification(`Error: ${errorString}`);
-    }
-  } finally {
-    setLoading(false);
-  }
-};
-const submitMilestone = async (escrowId: string) => {
-  if (!executeTransaction) return;
-  setLoading(true);
-
-  const updateMilestoneInDb = async (txId: string, escrowDetails: any) => {
-    const supabase = createSupabaseClient();
-    await supabase.from("escrows").update({ current_milestone_submitted: true }).eq("id", escrowId);
-    
-    await supabase.from("milestone_submissions").insert({
-      escrow_id: escrowId,
-      escrow_id_field: escrowDetails.escrow_id_field,
-      milestone_number: 0, 
-      submitter_address: address,
-      description: `Milestone submission for escrow ${escrowId}`,
-      status: "submitted",
-      aleo_transaction_id: txId,
-      is_on_chain: true,
-    });
-
-    await supabase.from("notifications").insert({
-      user_address: escrowDetails.client_address,
-      type: "milestone_submitted",
-      title: "Milestone Submitted",
-      message: `A milestone has been submitted for project: ${escrowDetails.description}`,
-      related_escrow_id: escrowId,
-    });
-    loadProjects();
   };
+  const approveMilestone = async (escrowId: string) => {
+    if (!executeTransaction || !address) return;
+    setLoading(true);
 
-  try {
-    const supabase = createSupabaseClient();
-    const { data: escrow } = await supabase.from("escrows").select("*").eq("id", escrowId).single();
-    if (!escrow) throw new Error("Escrow not found");
+    const finalizeApprovalInDb = async (escrow: any) => {
+      const supabase = createSupabaseClient();
+      const nextMilestone = escrow.milestone + 1;
+      const isCompleted = nextMilestone >= escrow.total_milestones;
 
-    const tx = await executeTransaction({
-      program: "freelancing_platform.aleo",
-      function: "submit_milestone",
-      inputs: [`${escrow.escrow_id_field}field`],
-      fee: 100000,
-      privateFee: false,
-    });
+      await supabase.from("escrows").update({
+        milestone: nextMilestone,
+        remaining_amount: escrow.remaining_amount - escrow.milestone_amounts[escrow.milestone],
+        current_milestone_submitted: false,
+        status: isCompleted ? "completed" : "active",
+        aleo_status: isCompleted ? 1 : 0,
+        completed_at: isCompleted ? new Date().toISOString() : null,
+      }).eq("id", escrowId);
 
-    const txId = typeof tx === "string" ? tx : tx?.transactionId;
-    if (txId) {
-      await pollTransaction(txId);
-      await updateMilestoneInDb(txId, escrow);
-      showNotification("Milestone submitted!");
+      await supabase.rpc("increment_earned_balance", {
+        freelancer_address: escrow.freelancer_address,
+        amount: escrow.milestone_amounts[escrow.milestone],
+      });
+
+      showNotification("Funds released!");
+      loadProjects();
+      loadUserStats();
+    };
+
+    try {
+      const supabase = createSupabaseClient();
+      const { data: escrow } = await supabase.from("escrows").select("*").eq("id", escrowId).single();
+      if (!escrow) throw new Error("Escrow not found");
+
+      const records = await requestRecords?.("freelancing_platform.aleo", false);
+      const freelancerRecord = records?.find((r: any) => typeof r === "string" && r.includes(escrow.freelancer_address));
+      if (!freelancerRecord) throw new Error("Freelancer record not found");
+
+      const decEscrow = escrow.aleo_escrow_record ? await decrypt?.(escrow.aleo_escrow_record) : undefined;
+      const decFreelancer = await decrypt?.(freelancerRecord as string);
+
+      const tx = await executeTransaction({
+        program: "freelancing_platform.aleo",
+        function: "approve_and_release",
+        inputs: [`${escrow.escrow_id_field}field`, decEscrow || escrow.aleo_escrow_record || "", decFreelancer || freelancerRecord],
+        fee: 150000,
+        privateFee: false,
+      });
+
+      if (tx) {
+        await finalizeApprovalInDb(escrow);
+      }
+    } catch (error: any) {
+      const errorString = error?.message || String(error);
+      if (errorString.includes("Accepted")) {
+        const { data: escrow } = await createSupabaseClient().from("escrows").select("*").eq("id", escrowId).single();
+        if (escrow) await finalizeApprovalInDb(escrow);
+      } else {
+        showNotification(`Error: ${errorString}`);
+      }
+    } finally {
+      setLoading(false);
     }
-  } catch (error: any) {
-    const errorString = error?.message || String(error);
-    if (errorString.includes("Accepted")) {
-       const { data: escrow } = await createSupabaseClient().from("escrows").select("*").eq("id", escrowId).single();
-       if (escrow) await updateMilestoneInDb("accepted_tx", escrow);
-       showNotification("Milestone submission broadcasted!");
-    } else {
-      showNotification(`Error: ${errorString}`);
-    }
-  } finally {
-    setLoading(false);
-  }
-};
-const approveMilestone = async (escrowId: string) => {
-  if (!executeTransaction || !address) return;
-  setLoading(true);
-
-  const finalizeApprovalInDb = async (escrow: any) => {
-    const supabase = createSupabaseClient();
-    const nextMilestone = escrow.milestone + 1;
-    const isCompleted = nextMilestone >= escrow.total_milestones;
-
-    await supabase.from("escrows").update({
-      milestone: nextMilestone,
-      remaining_amount: escrow.remaining_amount - escrow.milestone_amounts[escrow.milestone],
-      current_milestone_submitted: false,
-      status: isCompleted ? "completed" : "active",
-      aleo_status: isCompleted ? 1 : 0,
-      completed_at: isCompleted ? new Date().toISOString() : null,
-    }).eq("id", escrowId);
-
-    await supabase.rpc("increment_earned_balance", {
-      freelancer_address: escrow.freelancer_address,
-      amount: escrow.milestone_amounts[escrow.milestone],
-    });
-
-    showNotification("Funds released!");
-    loadProjects();
-    loadUserStats();
   };
-
-  try {
-    const supabase = createSupabaseClient();
-    const { data: escrow } = await supabase.from("escrows").select("*").eq("id", escrowId).single();
-    if (!escrow) throw new Error("Escrow not found");
-
-    const records = await requestRecords?.("freelancing_platform.aleo", false);
-    const freelancerRecord = records?.find((r: any) => typeof r === "string" && r.includes(escrow.freelancer_address));
-    if (!freelancerRecord) throw new Error("Freelancer record not found");
-
-    const decEscrow = escrow.aleo_escrow_record ? await decrypt?.(escrow.aleo_escrow_record) : undefined;
-    const decFreelancer = await decrypt?.(freelancerRecord as string);
-
-    const tx = await executeTransaction({
-      program: "freelancing_platform.aleo",
-      function: "approve_and_release",
-      inputs: [`${escrow.escrow_id_field}field`, decEscrow || escrow.aleo_escrow_record || "", decFreelancer || freelancerRecord],
-      fee: 150000,
-      privateFee: false,
-    });
-
-    if (tx) {
-      await finalizeApprovalInDb(escrow);
-    }
-  } catch (error: any) {
-    const errorString = error?.message || String(error);
-    if (errorString.includes("Accepted")) {
-      const { data: escrow } = await createSupabaseClient().from("escrows").select("*").eq("id", escrowId).single();
-      if (escrow) await finalizeApprovalInDb(escrow);
-    } else {
-      showNotification(`Error: ${errorString}`);
-    }
-  } finally {
-    setLoading(false);
-  }
-};
 
   const pollTransaction = async (txId: string): Promise<void> => {
     return new Promise((resolve, reject) => {
@@ -766,11 +777,10 @@ const approveMilestone = async (escrowId: string) => {
                         <button
                           key={tab}
                           onClick={() => setActiveTab(tab as any)}
-                          className={`capitalize px-4 py-2 rounded-lg transition-all ${
-                            activeTab === tab
+                          className={`capitalize px-4 py-2 rounded-lg transition-all ${activeTab === tab
                               ? "bg-gradient-to-r from-purple-600 to-blue-600"
                               : "hover:bg-white/5"
-                          }`}
+                            }`}
                         >
                           {tab === "create"
                             ? userRole === "client"
@@ -819,7 +829,7 @@ const approveMilestone = async (escrowId: string) => {
                     disabled={loading}
                     className="w-full py-3 bg-gradient-to-r from-purple-600 to-blue-600 rounded-lg font-semibold hover:opacity-90 transition-opacity disabled:opacity-50"
                   >
-                   {loadingAction === 'register-client' ? "Registering..." : "Register as Client"}
+                    {loadingAction === 'register-client' ? "Registering..." : "Register as Client"}
                   </button>
                 </div>
 
@@ -983,13 +993,12 @@ const approveMilestone = async (escrowId: string) => {
                               <span>
                                 Status:{" "}
                                 <span
-                                  className={`px-2 py-1 rounded-full text-xs ${
-                                    project.status === "active"
+                                  className={`px-2 py-1 rounded-full text-xs ${project.status === "active"
                                       ? "bg-green-500/20 text-green-400"
                                       : project.status === "completed"
                                         ? "bg-blue-500/20 text-blue-400"
                                         : "bg-red-500/20 text-red-400"
-                                  }`}
+                                    }`}
                                 >
                                   {project.status}
                                 </span>
@@ -1104,11 +1113,10 @@ const approveMilestone = async (escrowId: string) => {
                       <div>
                         <h3 className="text-lg font-semibold mb-2">Role</h3>
                         <div
-                          className={`inline-flex items-center px-4 py-2 rounded-full ${
-                            userRole === "client"
+                          className={`inline-flex items-center px-4 py-2 rounded-full ${userRole === "client"
                               ? "bg-purple-500/20 text-purple-400"
                               : "bg-blue-500/20 text-blue-400"
-                          }`}
+                            }`}
                         >
                           <span className="mr-2">
                             {userRole === "client" ? "👔" : "💻"}
