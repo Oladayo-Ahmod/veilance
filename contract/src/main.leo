@@ -148,7 +148,6 @@ program freelancing_platform.aleo {
    async transition approve_and_release(
         escrow_id: field,
         escrow: Escrow,
-        freelancer:address
     ) -> (Escrow, Future) {
 
         assert_eq(escrow.owner, self.caller);
@@ -159,7 +158,7 @@ program freelancing_platform.aleo {
             ? escrow.milestone_amounts[0u32] 
             : escrow.milestone_amounts[1u32];
 
-        let f: Future = credits.aleo/transfer_public(freelancer, amount);
+        let f: Future = credits.aleo/transfer_public(escrow.payee, amount);
 
         let next_milestone: u8 = escrow.milestone + 1u8;
         let done: bool = next_milestone >= escrow.total_milestones;
