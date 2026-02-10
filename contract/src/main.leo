@@ -148,26 +148,18 @@ program freelancing_platform.aleo {
    async transition approve_and_release(
         escrow_id: field,
         escrow: Escrow,
-        freelancer: Freelancer
-    ) -> (Escrow, Freelancer,Future) {
+        freelancer:address
+    ) -> (Escrow, Future) {
 
         assert_eq(escrow.owner, self.caller);
         assert(escrow.status == 0u8);
-        let amount: u64 = escrow.milestone_amounts[0u32];
-        
-        if escrow.milestone == 0u8 {
-            amount = escrow.milestone_amounts[0u32];
-        } else {
-           amount = escrow.milestone_amounts[1u32];
-        }
 
-        let updated_freelancer: Freelancer = Freelancer {
-            owner: freelancer.owner,
-            earned_balance: freelancer.earned_balance + amount,
-            rating: freelancer.rating,
-            skills: freelancer.skills,
-            completed_projects: freelancer.completed_projects + 1u32,
-        };
+        // Determine payment amount
+        let amount: u64 = escrow.milestone == 0u8 
+            ? escrow.milestone_amounts[0u32] 
+            : escrow.milestone_amounts[1u32];
+
+        let f: Future = credits.aleo/transfer_public(freelancer, amount);
 
         let next_milestone: u8 = escrow.milestone + 1u8;
         let done: bool = next_milestone >= escrow.total_milestones;
@@ -183,11 +175,12 @@ program freelancing_platform.aleo {
             status: done ? 1u8 : 0u8,
         };
 
-        return (updated_escrow, updated_freelancer,finalize_approve_and_release(escrow_id));
+        return (updated_escrow, finalize_approve_and_release(escrow_id, f));
     }
 
-    async function finalize_approve_and_release (escrow_id:field) {
+    async function finalize_approve_and_release(escrow_id: field, f: Future) {
+        f.await(); 
         assert(Mapping::get(milestone_submitted, escrow_id));
-         Mapping::set(milestone_submitted, escrow_id, false);
+        Mapping::set(milestone_submitted, escrow_id, false);
     }
 }

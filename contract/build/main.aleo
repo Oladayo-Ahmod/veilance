@@ -96,29 +96,28 @@ finalize submit_milestone:
 function approve_and_release:
     input r0 as field.private;
     input r1 as Escrow.record;
-    input r2 as Freelancer.record;
+    input r2 as address.private;
     assert.eq r1.owner self.caller;
     is.eq r1.status 0u8 into r3;
     assert.eq r3 true;
     is.eq r1.milestone 0u8 into r4;
     ternary r4 r1.milestone_amounts[0u32] r1.milestone_amounts[1u32] into r5;
-    add r2.earned_balance r5 into r6;
-    add r2.completed_projects 1u32 into r7;
-    cast r2.owner r6 r2.rating r2.skills r7 into r8 as Freelancer.record;
-    add r1.milestone 1u8 into r9;
-    gte r9 r1.total_milestones into r10;
-    sub r1.remaining_amount r5 into r11;
-    ternary r10 1u8 0u8 into r12;
-    cast r1.owner r1.payee r11 r9 r1.total_milestones r1.milestone_amounts r1.description r12 into r13 as Escrow.record;
-    async approve_and_release r0 into r14;
-    output r13 as Escrow.record;
-    output r8 as Freelancer.record;
-    output r14 as freelancing_platform.aleo/approve_and_release.future;
+    call credits.aleo/transfer_public r2 r5 into r6;
+    add r1.milestone 1u8 into r7;
+    gte r7 r1.total_milestones into r8;
+    sub r1.remaining_amount r5 into r9;
+    ternary r8 1u8 0u8 into r10;
+    cast r1.owner r1.payee r9 r7 r1.total_milestones r1.milestone_amounts r1.description r10 into r11 as Escrow.record;
+    async approve_and_release r0 r6 into r12;
+    output r11 as Escrow.record;
+    output r12 as freelancing_platform.aleo/approve_and_release.future;
 
 finalize approve_and_release:
     input r0 as field.public;
-    get milestone_submitted[r0] into r1;
-    assert.eq r1 true;
+    input r1 as credits.aleo/transfer_public.future;
+    await r1;
+    get milestone_submitted[r0] into r2;
+    assert.eq r2 true;
     set false into milestone_submitted[r0];
 
 constructor:
