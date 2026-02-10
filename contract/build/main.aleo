@@ -1,3 +1,4 @@
+import credits.aleo;
 program freelancing_platform.aleo;
 
 record Client:
@@ -46,9 +47,10 @@ function deposit_funds:
     input r0 as Client.record;
     input r1 as u64.private;
     assert.eq r0.owner self.caller;
-    add r0.escrow_balance r1 into r2;
-    cast r0.owner r2 r0.rating r0.completed_projects into r3 as Client.record;
-    output r3 as Client.record;
+    call credits.aleo/transfer_public_as_signer freelancing_platform.aleo r1 into r2;
+    add r0.escrow_balance r1 into r3;
+    cast r0.owner r3 r0.rating r0.completed_projects into r4 as Client.record;
+    output r4 as Client.record;
 
 function create_escrow:
     input r0 as address.private;

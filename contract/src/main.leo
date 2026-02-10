@@ -77,10 +77,9 @@ program freelancing_platform.aleo {
     //     };
     // }
 
-     transition deposit_funds(client: Client, amount: u64) -> (Client, Future) {
+     transition deposit_funds(client: Client, amount: u64) -> (Client) {
         assert_eq(client.owner, self.caller);
-
-        // let f = credits.aleo/transfer_public_as_signer(self.address, amount);
+        credits.aleo/transfer_public_as_signer(self.address, amount);
 
         let updated_client: Client = Client {
             owner: client.owner,
@@ -89,13 +88,8 @@ program freelancing_platform.aleo {
             completed_projects: client.completed_projects,
         };
 
-        return (updated_client, finalize_deposit_funds(self.caller, amount));
+        return (updated_client);
     }
-
-    async function finalize_deposit_funds(client_address: address, amount: u64) {
-        credits.aleo/transfer_public_as_signer(client_address, amount);
-    }
-    
 
     // ─────────────────────────────
     // Escrow creation
