@@ -66,21 +66,11 @@ program freelancing_platform.aleo {
     // Client funds
     // ─────────────────────────────
 
-    // transition deposit_funds(client: Client, amount: u64) -> Client {
-    //     assert_eq(client.owner, self.caller);
-
-    //     return Client {
-    //         owner: client.owner,
-    //         escrow_balance: client.escrow_balance + amount,
-    //         rating: client.rating,
-    //         completed_projects: client.completed_projects,
-    //     };
-    // }
-
-     transition deposit_funds(client: Client, amount: u64) -> (Client) {
+    async transition deposit_funds(client: Client, amount: u64) -> (Client, Future) {
         assert_eq(client.owner, self.caller);
-        credits.aleo/transfer_public_as_signer(self.address, amount);
-
+        
+        let f: Future = credits.aleo/transfer_public_as_signer(self.address, amount);
+        
         let updated_client: Client = Client {
             owner: client.owner,
             escrow_balance: client.escrow_balance + amount,
@@ -88,7 +78,11 @@ program freelancing_platform.aleo {
             completed_projects: client.completed_projects,
         };
 
-        return (updated_client);
+        return (updated_client, finalize_deposit_funds(f));
+    }
+
+    async function finalize_deposit_funds(f: Future) {
+        f.await();
     }
 
     // ─────────────────────────────

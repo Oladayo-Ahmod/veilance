@@ -50,7 +50,13 @@ function deposit_funds:
     call credits.aleo/transfer_public_as_signer freelancing_platform.aleo r1 into r2;
     add r0.escrow_balance r1 into r3;
     cast r0.owner r3 r0.rating r0.completed_projects into r4 as Client.record;
+    async deposit_funds r2 into r5;
     output r4 as Client.record;
+    output r5 as freelancing_platform.aleo/deposit_funds.future;
+
+finalize deposit_funds:
+    input r0 as credits.aleo/transfer_public_as_signer.future;
+    await r0;
 
 function create_escrow:
     input r0 as address.private;
