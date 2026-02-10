@@ -112,3 +112,6 @@ finalize approve_and_release:
     get milestone_submitted[r0] into r1;
     assert.eq r1 true;
     set false into milestone_submitted[r0];
+
+constructor:
+    assert.eq edition 0u16;

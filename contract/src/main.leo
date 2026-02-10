@@ -1,3 +1,4 @@
+import credits.aleo;
 program freelancing_platform.aleo {
 
     record Client {
@@ -33,6 +34,10 @@ program freelancing_platform.aleo {
     mapping escrows: field => bool;
     mapping milestone_submitted: field => bool;
 
+    @noupgrade
+    async constructor(
+    ) {}
+
     // ─────────────────────────────
     // Registration
     // ─────────────────────────────
@@ -54,22 +59,43 @@ program freelancing_platform.aleo {
             skills: skills,
             completed_projects: 0u32,
         };
-    }
+    } 
+    
 
     // ─────────────────────────────
     // Client funds
     // ─────────────────────────────
 
-    transition deposit_funds(client: Client, amount: u64) -> Client {
+    // transition deposit_funds(client: Client, amount: u64) -> Client {
+    //     assert_eq(client.owner, self.caller);
+
+    //     return Client {
+    //         owner: client.owner,
+    //         escrow_balance: client.escrow_balance + amount,
+    //         rating: client.rating,
+    //         completed_projects: client.completed_projects,
+    //     };
+    // }
+
+     transition deposit_funds(client: Client, amount: u64) -> (Client, Future) {
         assert_eq(client.owner, self.caller);
 
-        return Client {
+        // let f = credits.aleo/transfer_public_as_signer(self.address, amount);
+
+        let updated_client: Client = Client {
             owner: client.owner,
             escrow_balance: client.escrow_balance + amount,
             rating: client.rating,
             completed_projects: client.completed_projects,
         };
+
+        return (updated_client, finalize_deposit_funds(self.caller, amount));
     }
+
+    async function finalize_deposit_funds(client_address: address, amount: u64) {
+        credits.aleo/transfer_public_as_signer(client_address, amount);
+    }
+    
 
     // ─────────────────────────────
     // Escrow creation
