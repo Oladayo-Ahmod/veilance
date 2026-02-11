@@ -10,7 +10,6 @@ program freelancing_platform.aleo {
 
     record Freelancer {
         owner: address,
-        earned_balance: u64,
         rating: u8,
         skills: [field; 5],
         completed_projects: u32,
@@ -33,6 +32,8 @@ program freelancing_platform.aleo {
 
     mapping escrows: field => bool;
     mapping milestone_submitted: field => bool;
+    mapping freelancer_balances: address => u64;
+    mapping freelancer_stats: address => u32;
 
     @noupgrade
     async constructor(
@@ -54,7 +55,6 @@ program freelancing_platform.aleo {
     transition register_freelancer(skills: [field; 5]) -> Freelancer {
         return Freelancer {
             owner: self.caller as address,
-            earned_balance: 0u64,
             rating: 5u8,
             skills: skills,
             completed_projects: 0u32,
@@ -158,7 +158,7 @@ program freelancing_platform.aleo {
             ? escrow.milestone_amounts[0u32] 
             : escrow.milestone_amounts[1u32];
 
-        let f: Future = credits.aleo/transfer_public(escrow.payee, amount);
+        // let f: Future = credits.aleo/transfer_public(escrow.payee, amount);
 
         let next_milestone: u8 = escrow.milestone + 1u8;
         let done: bool = next_milestone >= escrow.total_milestones;
@@ -174,11 +174,13 @@ program freelancing_platform.aleo {
             status: done ? 1u8 : 0u8,
         };
 
-        return (updated_escrow, finalize_approve_and_release(escrow_id, f));
+        return (updated_escrow, finalize_approve_and_release(escrow_id, escrow.payee, amount));
     }
 
-    async function finalize_approve_and_release(escrow_id: field, f: Future) {
-        f.await(); 
+    async function finalize_approve_and_release(escrow_id: field, payee: address, amount: u64) {
+        // Update freelancer balance
+        let current_balance: u64 = Mapping::get_or_use(freelancer_balances, payee, 0u64);
+        Mapping::set(freelancer_balances, payee, current_balance + amount);
         assert(Mapping::get(milestone_submitted, escrow_id));
         Mapping::set(milestone_submitted, escrow_id, false);
     }
@@ -202,5 +204,18 @@ program freelancing_platform.aleo {
 
     async function finalize_withdraw_funds(f: Future) {
         f.await();
+    }
+
+    async transition freelancer_withdraw(amount: u64) -> Future {
+        let f: Future = credits.aleo/transfer_public(self.caller, amount);
+        return finalize_freelancer_withdraw(f, self.caller, amount);
+    }
+
+    async function finalize_freelancer_withdraw(f: Future, payee: address, amount: u64) {
+        f.await();
+        // Check and update their mapping balance
+        let current_balance: u64 = Mapping::get(freelancer_balances, payee);
+        assert(current_balance >= amount);
+        Mapping::set(freelancer_balances, payee, current_balance - amount);
     }
 }
