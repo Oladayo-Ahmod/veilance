@@ -1,5 +1,5 @@
 import credits.aleo;
-program freelancing_platform.aleo {
+program freelancing_platform_v1.aleo {
 
     /// @notice Record representing a client on the platform
     /// @param owner The address that owns this client record
