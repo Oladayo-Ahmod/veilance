@@ -162,5 +162,24 @@ finalize freelancer_withdraw:
     sub r3 r2 into r5;
     set r5 into freelancer_balances[r1];
 
+function cancel_escrow:
+    input r0 as field.private;
+    input r1 as Escrow.record;
+    input r2 as Client.record;
+    assert.eq r1.owner self.caller;
+    assert.eq r2.owner self.caller;
+    assert.eq r1.status 0u8;
+    add r2.escrow_balance r1.remaining_amount into r3;
+    cast r2.owner r3 r2.rating r2.completed_projects into r4 as Client.record;
+    async cancel_escrow r0 into r5;
+    output r4 as Client.record;
+    output r5 as freelancing_platform.aleo/cancel_escrow.future;
+
+finalize cancel_escrow:
+    input r0 as field.public;
+    get escrows[r0] into r1;
+    assert.eq r1 true;
+    set false into escrows[r0];
+
 constructor:
     assert.eq edition 0u16;
