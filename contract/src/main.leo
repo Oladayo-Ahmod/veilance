@@ -218,4 +218,33 @@ program freelancing_platform.aleo {
         assert(current_balance >= amount);
         Mapping::set(freelancer_balances, payee, current_balance - amount);
     }
+
+    // ─────────────────────────────
+    // Cancel Escrow (Refunds Client)
+    // ─────────────────────────────
+
+    async transition cancel_escrow(
+        escrow_id: field,
+        escrow: Escrow,
+        client: Client
+    ) -> (Client, Future) {
+        assert_eq(escrow.owner, self.caller);
+        assert_eq(client.owner, self.caller);
+
+        assert_eq(escrow.status, 0u8);
+
+        let updated_client: Client = Client {
+            owner: client.owner,
+            escrow_balance: client.escrow_balance + escrow.remaining_amount,
+            rating: client.rating,
+            completed_projects: client.completed_projects,
+        };
+
+        return (updated_client, finalize_cancel_escrow(escrow_id));
+    }
+
+    async function finalize_cancel_escrow(escrow_id: field) {
+        assert(Mapping::get(escrows, escrow_id));
+        Mapping::set(escrows, escrow_id, false);
+    }
 }
