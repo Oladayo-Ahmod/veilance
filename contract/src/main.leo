@@ -166,7 +166,7 @@ program freelancing_platform.aleo {
         };
 
         return (escrow, updated_client, finalize_create(escrow_id));
-    }
+    } 
 
     /// @notice Finalizes escrow creation by updating mappings
     /// @param id The escrow identifier
