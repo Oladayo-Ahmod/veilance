@@ -182,4 +182,25 @@ program freelancing_platform.aleo {
         assert(Mapping::get(milestone_submitted, escrow_id));
         Mapping::set(milestone_submitted, escrow_id, false);
     }
+
+    // Withdraw funds from client account
+    async transition withdraw_funds(client: Client, amount: u64) -> (Client, Future) {
+        assert_eq(client.owner, self.caller);
+        assert(client.escrow_balance >= amount);
+
+        let f: Future = credits.aleo/transfer_public(self.caller, amount);
+
+        let updated_client: Client = Client {
+            owner: client.owner,
+            escrow_balance: client.escrow_balance - amount,
+            rating: client.rating,
+            completed_projects: client.completed_projects,
+        };
+
+        return (updated_client, finalize_withdraw_funds(f));
+    }
+
+    async function finalize_withdraw_funds(f: Future) {
+        f.await();
+    }
 }
