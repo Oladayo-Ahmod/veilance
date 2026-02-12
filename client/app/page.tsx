@@ -241,7 +241,7 @@ export default function Home() {
     setLoading(true);
     try {
       const tx = await executeTransaction({
-        program: "freelancing_platform.aleo",
+        program: "freelancing_platform_v1.aleo",
         function: "register_client",
         inputs: [],
         fee: 100000,
@@ -293,17 +293,17 @@ const skillToField = (str:any) => {
     setLoading(true);
     try {
       const skillsToUse = registerSkills.slice(0, 5);
-
+      console.log(skillsToUse)
       const skillFields = skillsToUse.map((skill) => skillToField(skill));
- 
+      console.log(skillFields)
       while (skillFields.length < 5) {
         skillFields.push("0field");
       }
 
       const skillInput = `[${skillFields.join(",")}]`;
-
+      console.log(skillInput)
       const tx = await executeTransaction({
-        program: "freelancing_platform.aleo",
+        program: "freelancing_platform_v1.aleo",
         function: "register_freelancer",
         inputs: [skillInput],
         fee: 100000,
@@ -352,7 +352,7 @@ const skillToField = (str:any) => {
     try {
       // Get client record
       const records = await requestRecords?.(
-        "freelancing_platform.aleo",
+        "freelancing_platform_v1.aleo",
         false,
       );
       const clientRecord = records?.find(
@@ -372,7 +372,7 @@ const skillToField = (str:any) => {
         : undefined;
 
       const tx = await executeTransaction({
-        program: "freelancing_platform.aleo",
+        program: "freelancing_platform_v1.aleo",
         function: "deposit_funds",
         inputs: [
           String(decryptedRecord || clientRecord as string),
@@ -415,7 +415,7 @@ const skillToField = (str:any) => {
     try {
       // Get client record
       const records = await requestRecords?.(
-        "freelancing_platform.aleo",
+        "freelancing_platform_v1.aleo",
         false,
       );
       const clientRecord = records?.find(
@@ -435,7 +435,7 @@ const skillToField = (str:any) => {
       const milestone2 = amount - milestone1;
 
       const tx = await executeTransaction({
-        program: "freelancing_platform.aleo",
+        program: "freelancing_platform_v1.aleo",
         function: "create_escrow",
         inputs: [
           payee,
@@ -521,7 +521,7 @@ const skillToField = (str:any) => {
       }
 
       const tx = await executeTransaction({
-        program: "freelancing_platform.aleo",
+        program: "freelancing_platform_v1.aleo",
         function: "submit_milestone",
         inputs: [`${escrow.escrow_id_field}field`],
         fee: 100000,
@@ -584,7 +584,7 @@ const skillToField = (str:any) => {
     try {
       // Get necessary records from Aleo
       const records = await requestRecords?.(
-        "freelancing_platform.aleo",
+        "freelancing_platform_v1.aleo",
         false,
       );
 
@@ -622,7 +622,7 @@ const skillToField = (str:any) => {
         : undefined;
 
       const tx = await executeTransaction({
-        program: "freelancing_platform.aleo",
+        program: "freelancing_platform_v1.aleo",
         function: "approve_and_release",
         inputs: [
           `${escrow.escrow_id_field}field`,

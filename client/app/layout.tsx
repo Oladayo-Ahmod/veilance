@@ -12,7 +12,7 @@ import { DecryptPermission } from '@provablehq/aleo-wallet-adaptor-core';
 import { useMemo } from "react";
 
 const inter = Inter({ subsets: ["latin"] });
-const programName = "freelancing_platform.aleo";
+const programName = "freelancing_platform_v1.aleo";
 
 export default function RootLayout({
   children,
@@ -30,7 +30,7 @@ export default function RootLayout({
         <AleoWalletProvider
           wallets={wallets}
           network={Network.TESTNET}
-          autoConnect={true}
+          autoConnect={false}
           decryptPermission={DecryptPermission.UponRequest}
           programs={[programName]}
           onError={(error) => console.error(error)}
