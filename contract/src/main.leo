@@ -145,7 +145,7 @@ program freelancing_platform_v1.aleo {
         assert_eq(client.owner, self.caller);
         assert(client.escrow_balance >= total_amount);
 
-        let escrow_id: field = Poseidon2::hash_to_field(self.caller);
+        let escrow_id: field = Poseidon2::hash_to_field([self.caller as field, payee as field, description]);
 
         let escrow: Escrow = Escrow {
             owner: self.caller as address,
