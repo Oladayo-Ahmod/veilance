@@ -271,7 +271,7 @@ export default function Home() {
 
     try {
       const tx = await executeTransaction({
-        program: "freelancing_platform.aleo",
+        program: "freelancing_platform_v1.aleo",
         function: "register_client",
         inputs: [],
         fee: 100000,
@@ -362,7 +362,7 @@ export default function Home() {
       const skillInput = `[${skillFields.join(",")}]`;
 
       const tx = await executeTransaction({
-        program: "freelancing_platform.aleo",
+        program: "freelancing_platform_v1.aleo",
         function: "register_freelancer",
         inputs: [skillInput],
         fee: 100000,
@@ -416,7 +416,7 @@ export default function Home() {
     };
 
     try {
-      const records = await requestRecords?.("freelancing_platform.aleo", false);
+      const records = await requestRecords?.("freelancing_platform_v1.aleo", false);
       console.log(records)
       const clientRecordObj = records?.find((r: any) => {
         const isOwner = r.owner === address || r.sender === address;
@@ -434,14 +434,16 @@ export default function Home() {
       const ciphertext = (clientRecordObj as any)?.recordCiphertext;
       const decryptedRecord = await decrypt?.(ciphertext);
 
+      console.log(depositAmount, 'deposit' )
+
       const tx = await executeTransaction({
-        program: "freelancing_platform.aleo",
+        program: "freelancing_platform_v1.aleo",
         function: "deposit_funds",
         inputs: [
-          String(decryptedRecord || ciphertext), // Fallback to ciphertext if decrypt fails
+          decryptedRecord, // Fallback to ciphertext if decrypt fails
           `${depositAmount}u64`,
         ],
-        fee: 100000,
+        fee: 250000,
         privateFee: false,
       });
 
@@ -526,7 +528,7 @@ export default function Home() {
     };
 
     try {
-      const records = await requestRecords?.("freelancing_platform.aleo", false);
+      const records = await requestRecords?.("freelancing_platform_v1.aleo", false);
       console.log(records)
       const clientRecordObj = records?.find((r: any) => {
         const isOwner = r.owner === address || r.sender === address || r.owner?.includes(address);
@@ -549,7 +551,7 @@ export default function Home() {
       console.log(description)
 
       const tx = await executeTransaction({
-        program: "freelancing_platform.aleo",
+        program: "freelancing_platform_v1.aleo",
         function: "create_escrow",
         inputs: [
           payee,
@@ -617,7 +619,7 @@ export default function Home() {
       if (!escrow) throw new Error("Escrow not found");
 
       const tx = await executeTransaction({
-        program: "freelancing_platform.aleo",
+        program: "freelancing_platform_v1.aleo",
         function: "submit_milestone",
         inputs: [`${escrow.escrow_id_field}field`],
         fee: 100000,
@@ -676,7 +678,7 @@ export default function Home() {
       const { data: escrow } = await supabase.from("escrows").select("*").eq("id", escrowId).single();
       if (!escrow) throw new Error("Escrow not found");
 
-      const records = await requestRecords?.("freelancing_platform.aleo", false);
+      const records = await requestRecords?.("freelancing_platform_v1.aleo", false);
       const freelancerRecord = records?.find((r: any) => typeof r === "string" && r.includes(escrow.freelancer_address));
       if (!freelancerRecord) throw new Error("Freelancer record not found");
 
@@ -684,7 +686,7 @@ export default function Home() {
       const decFreelancer = await decrypt?.(freelancerRecord as string);
 
       const tx = await executeTransaction({
-        program: "freelancing_platform.aleo",
+        program: "freelancing_platform_v1.aleo",
         function: "approve_and_release",
         inputs: [`${escrow.escrow_id_field}field`, decEscrow || escrow.aleo_escrow_record || "", decFreelancer || freelancerRecord],
         fee: 150000,
