@@ -53,7 +53,7 @@ export default function Home() {
   const [showSkillsInput, setShowSkillsInput] = useState(false);
   const [depositAmount, setDepositAmount] = useState("");
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
-  const [withdrawAmount, setWithdrawAmount] = useState("");
+  // const [withdrawAmount, setWithdrawAmount] = useState("");
 
   // 3D Background Effect
   useEffect(() => {
@@ -726,6 +726,7 @@ export default function Home() {
       return;
     }
 
+    console.log(withdrawAmount)
     // Check if amount is entered
     if (!withdrawAmount || parseFloat(withdrawAmount) <= 0) {
       showNotification("Please enter a valid amount to withdraw");
