@@ -1,4 +1,4 @@
-import StatsCard from "../components/StatsCard";
+import StatsCard from "../ui/StatsCard";
 import { UserStats } from "../../types";
 
 interface StatsOverviewProps {

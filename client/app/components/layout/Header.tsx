@@ -1,6 +1,6 @@
 "use client";
 
-import WalletConnect from "../components/WalletConnect";
+import WalletConnect from "../ui/WalletConnect";
 
 interface HeaderProps {
   activeTab: "dashboard" | "projects" | "create" | "profile";

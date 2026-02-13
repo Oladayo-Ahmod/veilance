@@ -1,4 +1,5 @@
 import { UserRole } from "../../types";
+import ActionButton from "./ActionButton";
 
 interface QuickActionsProps {
   userRole: UserRole;

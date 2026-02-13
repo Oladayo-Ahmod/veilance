@@ -1,5 +1,5 @@
-import GlassCard from "../components/GlassCard";
-import SkillsCloud from "../components/SkillsCloud";
+import GlassCard from "../ui/GlassCard";
+import SkillsCloud from "../ui/SkillsCloud";
 
 interface SkillsSectionProps {
   skills: string[];

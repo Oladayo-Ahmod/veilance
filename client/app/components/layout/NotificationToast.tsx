@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+
 interface NotificationToastProps {
   message: string;
   onClose: () => void;

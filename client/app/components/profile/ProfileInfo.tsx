@@ -1,4 +1,6 @@
 import { UserStats, UserRole } from "../../types";
+import SkillsManager from "./SkillsManager";
+import StatsSummary from "./StatsSummary";
 
 interface ProfileInfoProps {
   address: string | undefined;

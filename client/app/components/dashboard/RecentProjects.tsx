@@ -1,4 +1,4 @@
-import ProjectCard from "../components/ProjectCard";
+import ProjectCard from "../ui/ProjectCard";
 import { Escrow, UserRole } from "../../types";
 
 interface RecentProjectsProps {
@@ -27,16 +27,18 @@ export default function RecentProjects({
         </button>
       </div>
       <div className="space-y-4">
-        {projects.map((project) => (
-          <ProjectCard
-            key={project.id}
-            project={project}
-            userRole={userRole}
-            userAddress={address}
-            onMilestoneSubmit={onMilestoneSubmit}
-            onMilestoneApprove={onMilestoneApprove}
-          />
-        ))}
+        {projects.map((project) => 
+          userRole && (
+            <ProjectCard
+              key={project.id}
+              project={project}
+              userRole={userRole}
+              userAddress={address}
+              onMilestoneSubmit={onMilestoneSubmit}
+              onMilestoneApprove={onMilestoneApprove}
+            />
+          )
+        )}
         {projects.length === 0 && (
           <div className="text-center py-8 text-gray-400">
             No projects yet. {userRole === "client" ? "Create your first project!" : "Start applying for projects!"}

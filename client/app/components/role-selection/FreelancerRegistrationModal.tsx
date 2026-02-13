@@ -1,4 +1,4 @@
-import GlassCard from "../components/GlassCard";
+import GlassCard from "../ui/GlassCard";
 
 interface FreelancerRegistrationModalProps {
   isOpen: boolean;

@@ -1,4 +1,4 @@
-import GlassCard from "../components/GlassCard";
+import GlassCard from "../ui/GlassCard";
 import ProfileInfo from "./ProfileInfo";
 import QuickActions from "./QuickActions";
 import { UserStats, UserRole } from "../../types";

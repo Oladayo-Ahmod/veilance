@@ -3,6 +3,7 @@ import GlassCard from "../ui/GlassCard";
 import RecentProjects from "./RecentProjects";
 import SkillsSection from "./SkillsSection";
 import DepositFunds from "./DepositFunds";
+import StatsOverview from "./StatsOverview";
 import { Escrow, UserStats, UserRole } from "../../types";
 
 interface DashboardProps {
