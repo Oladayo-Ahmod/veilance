@@ -1,5 +1,5 @@
-import StatsCard from "../components/StatsCard";
-import GlassCard from "../components/GlassCard";
+import StatsCard from "../ui/StatsCard";
+import GlassCard from "../ui/GlassCard";
 import RecentProjects from "./RecentProjects";
 import SkillsSection from "./SkillsSection";
 import DepositFunds from "./DepositFunds";
