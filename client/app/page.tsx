@@ -3,11 +3,11 @@
 import { useState, useEffect, useRef } from "react";
 import { useWallet } from "@provablehq/aleo-wallet-adaptor-react";
 import WalletConnect from "./components/WalletConnect";
-import GlassCard from "./components/GlassCard";
+import GlassCard from "./components/ui/GlassCard";
 import StatsCard from "./components/StatsCard";
-import ProjectCard from "./components/ProjectCard";
-import SkillsCloud from "./components/SkillsCloud";
-import EscrowForm from "./components/EscrowForm";
+import ProjectCard from "./components/ui/ProjectCard";
+import SkillsCloud from "./components/ui/SkillsCloud";
+import EscrowForm from "./components/ui/EscrowForm";
 // import MilestoneSubmission from "./components/MilestoneSubmission";
 import * as THREE from "three";
 import { createSupabaseClient } from "./lib/supabase";
@@ -353,14 +353,8 @@ export default function Home() {
 
     try {
       const skillsToUse = registerSkills.slice(0, 5);
-<<<<<<< HEAD
-      console.log(skillsToUse)
-      const skillFields = skillsToUse.map((skill) => skillToField(skill));
-      console.log(skillFields)
-=======
       const skillFields = skillsToUse.map((skill) => skillToField(skill));
 
->>>>>>> 90e80b454a455bd3afe571325523d54a5a3b7945
       while (skillFields.length < 5) {
         skillFields.push("0field");
       }
@@ -408,19 +402,6 @@ export default function Home() {
   const handleDepositFunds = async () => {
     if (!executeTransaction || !address || !depositAmount) return;
     setLoading(true);
-<<<<<<< HEAD
-    try {
-      // Get client record
-      const records = await requestRecords?.(
-        "freelancing_platform_v1.aleo",
-        false,
-      );
-      const clientRecord = records?.find(
-        (r: any) =>
-          typeof r === "string" && r.includes("owner") && r.includes(address),
-      );
-=======
->>>>>>> 90e80b454a455bd3afe571325523d54a5a3b7945
 
     const updateSupabaseBalance = async (amount: string) => {
       const supabase = createSupabaseClient();
@@ -440,10 +421,12 @@ export default function Home() {
       const clientRecordObj = records?.find((r: any) => {
         const isOwner = r.owner === address || r.sender === address;
         const isClientRecord = r.recordName === "Client";
+        const isClientFunction = r.functionName === "register_client";
 
-        return isOwner && isClientRecord && !r.spent;
+        return isOwner && isClientRecord && isClientFunction && !r.spent;
       }) as any;
 
+      console.log(clientRecordObj, 'clientRecordObj')
       if (!clientRecordObj) {
         showNotification("Client record not found. Please register as client first.");
         setLoading(false);
@@ -452,17 +435,18 @@ export default function Home() {
 
       const ciphertext = (clientRecordObj as any)?.recordCiphertext;
       const decryptedRecord = await decrypt?.(ciphertext);
-
-      console.log(depositAmount, 'deposit' )
+      const ALEO_UNIT = 1_000_000;
+      const microcreditsAmount = BigInt(depositAmount) * BigInt(ALEO_UNIT);
+      console.log(microcreditsAmount)
 
       const tx = await executeTransaction({
         program: "freelancing_platform_v1.aleo",
         function: "deposit_funds",
         inputs: [
-          decryptedRecord, // Fallback to ciphertext if decrypt fails
-          `${depositAmount}u64`,
+          decryptedRecord,
+          `${microcreditsAmount}u64`,
         ],
-        fee: 250000,
+        fee: 200000,
         privateFee: false,
       });
 
@@ -502,19 +486,6 @@ export default function Home() {
   const createEscrow = async (payee: string, amount: number, description: string) => {
     if (!executeTransaction || !address) return;
     setLoading(true);
-<<<<<<< HEAD
-    try {
-      // Get client record
-      const records = await requestRecords?.(
-        "freelancing_platform_v1.aleo",
-        false,
-      );
-      const clientRecord = records?.find(
-        (r: any) =>
-          typeof r === "string" && r.includes("owner") && r.includes(address),
-      );
-=======
->>>>>>> 90e80b454a455bd3afe571325523d54a5a3b7945
 
     const saveEscrowToDb = async (txId: string) => {
       const milestone1 = Math.floor(amount / 2);
@@ -680,15 +651,6 @@ export default function Home() {
   const approveMilestone = async (escrowId: string) => {
     if (!executeTransaction || !address) return;
     setLoading(true);
-<<<<<<< HEAD
-    try {
-      // Get necessary records from Aleo
-      const records = await requestRecords?.(
-        "freelancing_platform_v1.aleo",
-        false,
-      );
-=======
->>>>>>> 90e80b454a455bd3afe571325523d54a5a3b7945
 
     const finalizeApprovalInDb = async (escrow: any) => {
       const supabase = createSupabaseClient();
