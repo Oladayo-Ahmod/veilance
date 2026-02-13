@@ -7,7 +7,7 @@ interface QuickActionsProps {
   onAddFunds: () => void;
   onBrowseProjects: () => void;
   onUpdateSkills: () => void;
-  onWithdrawFunds: () => void;
+  onWithdrawFunds: () => void;  
 }
 
 export default function QuickActions({
@@ -39,7 +39,7 @@ export default function QuickActions({
             <ActionButton
               title="Withdraw Funds"
               description="Withdraw ALEO from your balance"
-              onClick={onWithdrawFunds}
+              onClick={onWithdrawFunds}  // This will open the modal
               gradient="from-orange-600 to-red-600"
             />
           </>
@@ -51,7 +51,12 @@ export default function QuickActions({
               onClick={onBrowseProjects}
               gradient="from-blue-600 to-cyan-600"
             />
-            <ActionButton title="Update Skills" description="Add new skills to your profile" onClick={onUpdateSkills} isSecondary />
+            <ActionButton 
+              title="Update Skills" 
+              description="Add new skills to your profile" 
+              onClick={onUpdateSkills} 
+              isSecondary 
+            />
           </>
         )}
       </div>
