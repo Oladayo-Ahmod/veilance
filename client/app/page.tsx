@@ -807,7 +807,7 @@ export default function Home() {
 
               {activeTab === "profile" && (
                 <Profile
-                  address={address}
+                  address={address || ""}
                   userRole={userRole}
                   userStats={userStats}
                   onAddSkill={addSkill}
