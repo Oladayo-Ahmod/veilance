@@ -7,6 +7,7 @@ interface QuickActionsProps {
   onAddFunds: () => void;
   onBrowseProjects: () => void;
   onUpdateSkills: () => void;
+  onWithdrawFunds: () => void;
 }
 
 export default function QuickActions({
@@ -15,6 +16,7 @@ export default function QuickActions({
   onAddFunds,
   onBrowseProjects,
   onUpdateSkills,
+  onWithdrawFunds
 }: QuickActionsProps) {
   return (
     <>
@@ -33,6 +35,12 @@ export default function QuickActions({
               description="Deposit ALEO to your escrow balance"
               onClick={onAddFunds}
               isSecondary
+            />
+            <ActionButton
+              title="Withdraw Funds"
+              description="Withdraw ALEO from your balance"
+              onClick={onWithdrawFunds}
+              gradient="from-orange-600 to-red-600"
             />
           </>
         ) : (

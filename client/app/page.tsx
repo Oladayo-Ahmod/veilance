@@ -735,6 +735,142 @@ export default function Home() {
     });
   };
 
+
+const withdrawFunds = async () => {
+  if (!executeTransaction || !address) {
+    showNotification("Wallet not connected");
+    return;
+  }
+
+  // Check if amount is entered
+  if (!withdrawAmount || parseFloat(withdrawAmount) <= 0) {
+    showNotification("Please enter a valid amount to withdraw");
+    return;
+  }
+
+  const amount = parseFloat(withdrawAmount);
+  const currentBalance = userStats.totalEarned;
+
+  // Check if amount exceeds balance
+  if (amount > currentBalance) {
+    showNotification(`Insufficient balance. You have ${currentBalance.toFixed(2)} ALEO available`);
+    return;
+  }
+
+  // Check minimum withdrawal 
+  const MIN_WITHDRAWAL = 0.01; // 0.01 ALEO minimum
+  if (amount < MIN_WITHDRAWAL) {
+    showNotification(`Minimum withdrawal amount is ${MIN_WITHDRAWAL} ALEO`);
+    return;
+  }
+
+  setLoading(true);
+  setLoadingAction('withdraw');
+
+  const updateSupabaseBalance = async (amount: string) => {
+    const supabase = createSupabaseClient();
+    
+    // verify current balance hasn't changed
+    const { data: currentUser } = await supabase
+      .from("users")
+      .select("escrow_balance")
+      .eq("address", address)
+      .single();
+
+    if (currentUser && parseFloat(currentUser.escrow_balance) < parseFloat(amount)) {
+      throw new Error("Balance changed. Please try again.");
+    }
+
+    // Proceed with decrement
+    const { error } = await supabase.rpc("decrement_balance", {
+      user_address: address,
+      amount: parseFloat(amount),
+    });
+    
+    if (error) throw error;
+
+    setWithdrawAmount("");
+    loadUserStats();
+    showNotification(`✅ Successfully withdrew ${amount} ALEO!`);
+  };
+
+  try {
+    // Find the client record
+    const records = await requestRecords?.("freelancing_platform_v1.aleo", false);
+    
+    const clientRecordObj = records?.find((r: any) => {
+      const isOwner = r.owner === address || r.sender === address || r.owner?.includes(address);
+      const isClientRecord = r.recordName === "Client";
+      return isOwner && isClientRecord && !r.spent;
+    });
+
+    if (!clientRecordObj) {
+      showNotification("❌ Client record not found. Please ensure you are registered as a client.");
+      setLoading(false);
+      setLoadingAction(null);
+      return;
+    }
+
+    // Decrypt the client record
+    const ciphertext = (clientRecordObj as any)?.recordCiphertext;
+    const decryptedRecord = await decrypt?.(ciphertext);
+    
+    // Convert ALEO amount to microcredits (1 ALEO = 1,000,000 microcredits)
+    const ALEO_UNIT = 1_000_000;
+    const microcreditsAmount = BigInt(amount) * BigInt(ALEO_UNIT);
+    
+    // Execute the withdraw transaction
+    const tx = await executeTransaction({
+      program: "freelancing_platform_v1.aleo",
+      function: "withdraw_funds",
+      inputs: [
+        decryptedRecord || ciphertext,
+        `${microcreditsAmount}u64`,
+      ],
+      fee: 200000,
+      privateFee: false,
+    });
+
+    const txId = typeof tx === "string" ? tx : tx?.transactionId;
+
+    if (txId) {
+      await pollTransaction(txId);
+      await updateSupabaseBalance(withdrawAmount);
+    }
+
+  } catch (error: any) {
+    const errorString = error?.message || String(error);
+
+    if (errorString.includes("Insufficient") || errorString.includes("insufficient")) {
+      showNotification(`❌ Insufficient balance in escrow contract. Please refresh and try again.`);
+    }
+    else if (errorString.includes("Transaction Accepted") || errorString.includes("Accepted")) {
+      console.log("Withdraw accepted via catch block");
+      
+      // Optimistically update the database
+      const supabase = createSupabaseClient();
+      try {
+        await supabase.rpc("decrement_balance", {
+          user_address: address,
+          amount: parseFloat(withdrawAmount),
+        });
+        setWithdrawAmount("");
+        loadUserStats();
+        showNotification(`✅ Withdrawal of ${withdrawAmount} ALEO submitted! Transaction pending...`);
+      } catch (dbError) {
+        console.error("Error updating balance after accepted transaction:", dbError);
+        showNotification(`⚠️ Transaction accepted but balance update pending. It will sync shortly.`);
+      }
+    } else {
+      console.error("Withdraw error:", error);
+      showNotification(`❌ Error: ${errorString.substring(0, 100)}...`);
+    }
+  } finally {
+    setLoading(false);
+    setLoadingAction(null);
+  }
+};
+
   const showNotification = (message: string) => {
     setNotification(message);
     setTimeout(() => setNotification(""), 5000);
