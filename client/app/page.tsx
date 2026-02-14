@@ -53,6 +53,7 @@ export default function Home() {
   const [showSkillsInput, setShowSkillsInput] = useState(false);
   const [depositAmount, setDepositAmount] = useState("");
   const [loadingAction, setLoadingAction] = useState<string | null>(null);
+  const [selectedFreelancer, setSelectedFreelancer] = useState<string>("");
   // const [withdrawAmount, setWithdrawAmount] = useState("");
 
   // 3D Background Effect
@@ -468,6 +469,12 @@ export default function Home() {
   };
 
   const createEscrow = async (payee: string, amount: number, description: string) => {
+     const freelancerAddress = payee || selectedFreelancer;
+
+      if (!freelancerAddress) {
+    showNotification("Please select a freelancer first");
+    return;
+  }
     if (!executeTransaction || !address) return;
     setLoading(true);
 
