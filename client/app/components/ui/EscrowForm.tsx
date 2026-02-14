@@ -85,7 +85,7 @@ export default function EscrowForm({ onSubmit, loading, userStats }: EscrowFormP
                   Number of Milestones
                 </label>
                 <div className="flex space-x-2">
-                  {[1, 2, 3, 4].map((num) => (
+                  {[2].map((num) => (
                     <button
                       key={num}
                       type="button"

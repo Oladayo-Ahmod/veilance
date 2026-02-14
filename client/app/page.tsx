@@ -405,9 +405,9 @@ export default function Home() {
       const clientRecordObj = records?.find((r: any) => {
         const isOwner = r.owner === address || r.sender === address;
         const isClientRecord = r.recordName === "Client";
-        const isClientFunction = r.functionName === "register_client";
+        // const isClientFunction = r.functionName === "register_client";
 
-        return isOwner && isClientRecord && isClientFunction && !r.spent;
+        return isOwner && isClientRecord && !r.spent;
       }) as any;
 
       console.log(clientRecordObj, 'clientRecordObj')
@@ -720,31 +720,31 @@ export default function Home() {
   };
 
 
-  const withdrawFunds = async () => {
+  const withdrawFunds = async (amount: string) => {
     if (!executeTransaction || !address) {
       showNotification("Wallet not connected");
       return;
     }
 
-    console.log(withdrawAmount)
+    console.log(amount)
     // Check if amount is entered
-    if (!withdrawAmount || parseFloat(withdrawAmount) <= 0) {
+    if (!amount || parseFloat(amount) <= 0) {
       showNotification("Please enter a valid amount to withdraw");
       return;
     }
 
-    const amount = parseFloat(withdrawAmount);
+    const numAmount  = parseFloat(amount);
     const currentBalance = userStats.totalEarned;
 
     // Check if amount exceeds balance
-    if (amount > currentBalance) {
+    if (numAmount  > currentBalance) {
       showNotification(`Insufficient balance. You have ${currentBalance.toFixed(2)} ALEO available`);
       return;
     }
 
     // Check minimum withdrawal 
     const MIN_WITHDRAWAL = 0.01; // 0.01 ALEO minimum
-    if (amount < MIN_WITHDRAWAL) {
+    if (numAmount  < MIN_WITHDRAWAL) {
       showNotification(`Minimum withdrawal amount is ${MIN_WITHDRAWAL} ALEO`);
       return;
     }
@@ -762,7 +762,7 @@ export default function Home() {
         .eq("address", address)
         .single();
 
-      if (currentUser && parseFloat(currentUser.escrow_balance) < parseFloat(amount)) {
+      if (currentUser && parseFloat(currentUser.escrow_balance) < numAmount) {
         throw new Error("Balance changed. Please try again.");
       }
 
@@ -774,7 +774,7 @@ export default function Home() {
 
       if (error) throw error;
 
-      setWithdrawAmount("");
+ 
       loadUserStats();
       showNotification(`✅ Successfully withdrew ${amount} ALEO!`);
     };
@@ -802,7 +802,7 @@ export default function Home() {
 
       // Convert ALEO amount to microcredits (1 ALEO = 1,000,000 microcredits)
       const ALEO_UNIT = 1_000_000;
-      const microcreditsAmount = BigInt(amount) * BigInt(ALEO_UNIT);
+      const microcreditsAmount = BigInt(numAmount) * BigInt(ALEO_UNIT);
 
       // Execute the withdraw transaction
       const tx = await executeTransaction({
@@ -820,7 +820,7 @@ export default function Home() {
 
       if (txId) {
         await pollTransaction(txId);
-        await updateSupabaseBalance(withdrawAmount);
+        await updateSupabaseBalance(amount);
       }
 
     } catch (error: any) {
@@ -837,11 +837,10 @@ export default function Home() {
         try {
           await supabase.rpc("decrement_balance", {
             user_address: address,
-            amount: parseFloat(withdrawAmount),
+            amount: parseFloat(amount),
           });
-          setWithdrawAmount("");
           loadUserStats();
-          showNotification(`✅ Withdrawal of ${withdrawAmount} ALEO submitted! Transaction pending...`);
+          showNotification(`✅ Withdrawal of ${amount} ALEO submitted! Transaction pending...`);
         } catch (dbError) {
           console.error("Error updating balance after accepted transaction:", dbError);
           showNotification(`⚠️ Transaction accepted but balance update pending. It will sync shortly.`);
@@ -937,12 +936,13 @@ export default function Home() {
                   setShowSkillsInput={setShowSkillsInput}
                   onCreateProject={() => setActiveTab("create")}
                   onWithdrawFunds={withdrawFunds}
-                  withdrawAmount={withdrawAmount}
+                  // withdrawAmount={withdrawAmount}
                   onAddFunds={() => {
                     setActiveTab("dashboard");
                     setDepositAmount("100");
                   }}
                   onBrowseProjects={() => setActiveTab("create")}
+                   loading={loading}
                 />
               )}
             </>

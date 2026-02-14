@@ -23,3 +23,11 @@ export interface UserStats {
   rating: number;
   skills: string[];
 }
+
+export interface Freelancer {
+  address: string;
+  skills: string[];
+  rating: number;
+  completedProjects: number;
+  earnedBalance: number;
+}
