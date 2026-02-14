@@ -36,7 +36,7 @@ export default function Home() {
 
   const [userRole, setUserRole] = useState<UserRole>(null);
   const [activeTab, setActiveTab] = useState<
-    "dashboard" | "projects" | "create" | "profile"
+    "dashboard" | "projects" | "create" | "profile" | "freelancers"
   >("dashboard");
   const [userStats, setUserStats] = useState<UserStats>({
     totalProjects: 0,
@@ -944,6 +944,23 @@ export default function Home() {
                   onBrowseProjects={() => setActiveTab("create")}
                    loading={loading}
                 />
+              )}
+
+              {activeTab === "freelancers" && userRole === "client" && (
+                <BrowseFreelancers
+                  onHire={(address) => {
+                    setSelectedFreelancer(address);
+                    setActiveTab("create");
+                  }}
+                  loading={loading}
+                />
+              )}
+
+            // If a freelancer somehow accesses this tab, show a message
+              {activeTab === "freelancers" && userRole === "freelancer" && (
+                <div className="text-center py-12">
+                  <p className="text-gray-400">This section is for clients only</p>
+                </div>
               )}
             </>
           )}
