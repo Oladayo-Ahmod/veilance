@@ -471,7 +471,9 @@ export default function Home() {
   };
 
   const createEscrow = async (payee: string, amount: number, description: string) => {
-     const freelancerAddress = payee || selectedFreelancer;
+      const freelancerAddress = payee || selectedFreelancer;
+      let finalTxId = "";
+      let escrowIdField = "";
 
       if (!freelancerAddress) {
         showNotification("Please select a freelancer first");
@@ -563,35 +565,43 @@ export default function Home() {
         privateFee: false,
       });
 
-      const tempTxId = typeof tx === "string" ? tx : tx?.transactionId;
-      if (tempTxId) {
-      const finalTxId = await pollTransaction(tempTxId);
-      console.log("Final transaction ID:", finalTxId); 
-      
+     const tempTxId = typeof tx === "string" ? tx : tx?.transactionId;
+    console.log("Temp Transaction ID:", tempTxId);
+
+    if (tempTxId) {
+      finalTxId = await pollTransaction(tempTxId);
+      console.log("Final transaction ID:", finalTxId);
+
       const txDetails = await fetchTransactionDetails(finalTxId);
       console.log("Transaction details:", txDetails);
-      
-      const escrowIdField = extractEscrowIdFromTxDetails(txDetails);
+
+      escrowIdField = extractEscrowIdFromTxDetails(txDetails);
       console.log("Extracted escrow_id:", escrowIdField);
-      
+
       await saveEscrowToDb(finalTxId, escrowIdField);
-      
+
       showNotification("Escrow created successfully!");
       setShowRegisterModal(false);
       }
     } catch (error: any) {
-      const errorString = error?.message || String(error);
-      if (errorString.includes("Accepted")) {
-        await saveEscrowToDb("accepted_tx");
+    const errorString = error?.message || String(error);
+    
+    if (errorString.includes("Accepted")) {
+      if (finalTxId && escrowIdField) {
+        await saveEscrowToDb(finalTxId, escrowIdField);
         showNotification("Escrow creation submitted!");
       } else {
-        console.error("Create escrow error:", error);
-        showNotification(`Error: ${errorString}`);
+        showNotification("Escrow creation submitted! It will be confirmed shortly.");
       }
-    } finally {
-      setLoading(false);
+    } else {
+      console.error("Create escrow error:", error);
+      showNotification(`Error: ${errorString}`);
     }
-  };
+  } finally {
+    setLoading(false);
+  }
+};
+
   const submitMilestone = async (escrowId: string) => {
     if (!executeTransaction) return;
     setLoading(true);
@@ -607,7 +617,7 @@ export default function Home() {
         submitter_address: address,
         description: `Milestone submission for escrow ${escrowId}`,
         status: "submitted",
-        aleo_transaction_id: txId,
+        aleo_transaction_id: tempTxId,
         is_on_chain: true,
       });
 
@@ -725,7 +735,9 @@ const pollTransaction = async (tempTxId: string): Promise<string> => {
         
         if (!status) return;
 
-        if (status.status === "accepted" && status.transactionId) {
+        console.log(`Polling transaction ${tempTxId}:`, status);
+        if (status.status === "Accepted" && status.transactionId) {
+          console.log(status.transactionId, 'final tx id in poll')
           clearInterval(interval);
           resolve(status.transactionId); // Returns the final tx ID 
         } else if (status.status !== "pending") {
