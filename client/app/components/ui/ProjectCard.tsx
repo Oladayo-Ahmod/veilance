@@ -1,3 +1,5 @@
+import { useState } from "react";
+
 interface ProjectCardProps {
   project: {
     id: string;
@@ -12,6 +14,7 @@ interface ProjectCardProps {
   userAddress: string;
   onMilestoneSubmit: (escrowId: string) => void;
   onMilestoneApprove: (escrowId: string) => void;
+  loading?: boolean;
 }
 
 export default function ProjectCard({ 
@@ -19,8 +22,12 @@ export default function ProjectCard({
   userRole, 
   userAddress,
   onMilestoneSubmit,
-  onMilestoneApprove 
+  onMilestoneApprove,
+  loading: globalLoading 
 }: ProjectCardProps) {
+  const [submitLoading, setSubmitLoading] = useState(false);
+  const [approveLoading, setApproveLoading] = useState(false);
+
   const statusColors = {
     active: 'bg-green-500/20 text-green-400',
     completed: 'bg-blue-500/20 text-blue-400',
@@ -28,6 +35,26 @@ export default function ProjectCard({
   };
 
   const progress = (project.currentMilestone / project.milestones) * 100;
+
+  const handleSubmit = async () => {
+    setSubmitLoading(true);
+    try {
+      await onMilestoneSubmit(project.id);
+    } finally {
+      setSubmitLoading(false);
+    }
+  };
+
+  const handleApprove = async () => {
+    setApproveLoading(true);
+    try {
+      await onMilestoneApprove(project.id);
+    } finally {
+      setApproveLoading(false);
+    }
+  };
+
+  const isLoading = submitLoading || approveLoading || globalLoading;
 
   return (
     <div className="glassmorphism-dark rounded-xl p-6 hover:bg-white/5 transition-colors">
@@ -85,33 +112,85 @@ export default function ProjectCard({
            project.currentMilestone < project.milestones && 
            !project.milestoneSubmitted && (
             <button
-              onClick={() => onMilestoneSubmit(project.id)}
-              className="px-4 py-2 bg-gradient-to-r from-blue-600 to-cyan-600 rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity"
+              onClick={handleSubmit}
+              disabled={isLoading}
+              className={`
+                px-4 py-2 rounded-lg text-sm font-semibold 
+                transition-all flex items-center space-x-2
+                ${isLoading 
+                  ? 'bg-blue-600/50 cursor-not-allowed' 
+                  : 'bg-gradient-to-r from-blue-600 to-cyan-600 hover:opacity-90'
+                }
+              `}
             >
-              Submit Milestone {project.currentMilestone + 1}
+              {submitLoading ? (
+                <>
+                  <span className="animate-spin">⏳</span>
+                  <span>Submitting...</span>
+                </>
+              ) : (
+                <span>Submit Milestone {project.currentMilestone + 1}</span>
+              )}
             </button>
           )}
           
           {userRole === 'freelancer' && project.milestoneSubmitted && (
-            <div className="px-4 py-2 bg-yellow-500/20 text-yellow-400 rounded-lg text-sm">
-              ⏳ Waiting for client approval
+            <div className="px-4 py-2 bg-yellow-500/20 text-yellow-400 rounded-lg text-sm flex items-center space-x-2">
+              <span>⏳</span>
+              <span>Waiting for client approval</span>
             </div>
           )}
           
           {userRole === 'client' && project.milestoneSubmitted && (
             <button
-              onClick={() => onMilestoneApprove(project.id)}
-              className="px-4 py-2 bg-gradient-to-r from-green-600 to-emerald-600 rounded-lg text-sm font-semibold hover:opacity-90 transition-opacity"
+              onClick={handleApprove}
+              disabled={isLoading}
+              className={`
+                px-4 py-2 rounded-lg text-sm font-semibold 
+                transition-all flex items-center space-x-2
+                ${isLoading 
+                  ? 'bg-green-600/50 cursor-not-allowed' 
+                  : 'bg-gradient-to-r from-green-600 to-emerald-600 hover:opacity-90'
+                }
+              `}
             >
-              Approve & Release Payment
+              {approveLoading ? (
+                <>
+                  <span className="animate-spin">⏳</span>
+                  <span>Processing...</span>
+                </>
+              ) : (
+                <span>Approve & Release Payment</span>
+              )}
             </button>
           )}
           
           {userRole === 'client' && !project.milestoneSubmitted && (
-            <div className="px-4 py-2 bg-white/10 rounded-lg text-sm">
-              Waiting for freelancer submission
+            <div className="px-4 py-2 bg-white/10 rounded-lg text-sm flex items-center space-x-2">
+              <span>⏳</span>
+              <span>Waiting for freelancer submission</span>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Completed Status */}
+      {project.status === 'completed' && (
+        <div className="flex justify-end pt-4 border-t border-white/10">
+          <div className="px-4 py-2 bg-green-500/20 text-green-400 rounded-lg text-sm flex items-center space-x-2">
+            <span>✅</span>
+            <span>Project Completed</span>
+          </div>
+        </div>
+      )}
+
+      {/* Disputed Status */}
+      {project.status === 'disputed' && (
+        <div className="flex justify-end pt-4 border-t border-white/10">
+          <div className="px-4 py-2 bg-red-500/20 text-red-400 rounded-lg text-sm flex items-center space-x-2">
+            <span>⚠️</span>
+            <span>Dispute Resolution</span>
+          </div>
         </div>
       )}
     </div>
