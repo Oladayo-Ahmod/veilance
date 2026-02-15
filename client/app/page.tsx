@@ -15,6 +15,7 @@ import FindWork from "./components/create/FindWork";
 import Profile from "./components/profile/Profile";
 import { createSupabaseClient } from "./lib/supabase";
 import { UserRole, Escrow, UserStats } from "./types";
+import {extractEscrowIdFromTxDetails,fetchTransactionDetails} from './lib/aleo'
 
 // import MilestoneSubmission from "./components/MilestoneSubmission";
 import * as THREE from "three";
@@ -473,13 +474,13 @@ export default function Home() {
      const freelancerAddress = payee || selectedFreelancer;
 
       if (!freelancerAddress) {
-    showNotification("Please select a freelancer first");
-    return;
+        showNotification("Please select a freelancer first");
+        return;
   }
     if (!executeTransaction || !address) return;
     setLoading(true);
 
-    const saveEscrowToDb = async (txId: string) => {
+    const saveEscrowToDb = async (txId: string, escrowIdField:string) => {
       const milestone1 = Math.floor(amount / 2);
       const milestone2 = amount - milestone1;
       const supabase = createSupabaseClient();
@@ -495,6 +496,8 @@ export default function Home() {
           description: description,
           status: "active",
           aleo_status: 0,
+          escrow_id_field: escrowIdField,
+
         })
         .select().single();
 
@@ -560,12 +563,21 @@ export default function Home() {
         privateFee: false,
       });
 
-      const txId = typeof tx === "string" ? tx : tx?.transactionId;
-      if (txId) {
-        await pollTransaction(txId);
-        await saveEscrowToDb(txId);
-        showNotification("Escrow created successfully!");
-        setShowRegisterModal(false);
+      const tempTxId = typeof tx === "string" ? tx : tx?.transactionId;
+      if (tempTxId) {
+      const finalTxId = await pollTransaction(tempTxId);
+      console.log("Final transaction ID:", finalTxId); 
+      
+      const txDetails = await fetchTransactionDetails(finalTxId);
+      console.log("Transaction details:", txDetails);
+      
+      const escrowIdField = extractEscrowIdFromTxDetails(txDetails);
+      console.log("Extracted escrow_id:", escrowIdField);
+      
+      await saveEscrowToDb(finalTxId, escrowIdField);
+      
+      showNotification("Escrow created successfully!");
+      setShowRegisterModal(false);
       }
     } catch (error: any) {
       const errorString = error?.message || String(error);
@@ -584,7 +596,7 @@ export default function Home() {
     if (!executeTransaction) return;
     setLoading(true);
 
-    const updateMilestoneInDb = async (txId: string, escrowDetails: any) => {
+    const updateMilestoneInDb = async (tempTxId: string, escrowDetails: any) => {
       const supabase = createSupabaseClient();
       await supabase.from("escrows").update({ current_milestone_submitted: true }).eq("id", escrowId);
 
@@ -705,29 +717,28 @@ export default function Home() {
     }
   };
 
-  const pollTransaction = async (txId: string): Promise<void> => {
-    return new Promise((resolve, reject) => {
-      const interval = setInterval(async () => {
-        try {
-          const status = await transactionStatus?.(txId);
-          console.log(status,'status')
-          if (!status) return;
+const pollTransaction = async (tempTxId: string): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const interval = setInterval(async () => {
+      try {
+        const status = await transactionStatus?.(tempTxId);
+        
+        if (!status) return;
 
-          if (status.status !== "pending") {
-            clearInterval(interval);
-            if (status.status === "accepted") {
-              resolve();
-            } else {
-              reject(new Error(`Transaction ${status.status}`));
-            }
-          }
-        } catch (error) {
+        if (status.status === "accepted" && status.transactionId) {
           clearInterval(interval);
-          reject(error);
+          resolve(status.transactionId); // Returns the final tx ID 
+        } else if (status.status !== "pending") {
+          clearInterval(interval);
+          reject(new Error(`Transaction ${status.status}`));
         }
-      }, 2000);
-    });
-  };
+      } catch (error) {
+        clearInterval(interval);
+        reject(error);
+      }
+    }, 2000);
+  });
+};
 
 
   const withdrawFunds = async (amount: string) => {
