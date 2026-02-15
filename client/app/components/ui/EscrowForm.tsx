@@ -7,10 +7,11 @@ interface EscrowFormProps {
   onSubmit: (payee: string, amount: number, description: string) => void;
   loading: boolean;
   userStats: any;
+  initialFreelancer?: string;
 }
 
-export default function EscrowForm({ onSubmit, loading, userStats }: EscrowFormProps) {
-  const [payee, setPayee] = useState('');
+export default function EscrowForm({ onSubmit, loading, userStats,initialFreelancer  }: EscrowFormProps) {
+  const [payee, setPayee] = useState(initialFreelancer || "");
   const [amount, setAmount] = useState('');
   const [description, setDescription] = useState('');
   const [milestones, setMilestones] = useState(2);
@@ -29,25 +30,32 @@ export default function EscrowForm({ onSubmit, loading, userStats }: EscrowFormP
     <div className="grid lg:grid-cols-3 gap-8">
       <div className="lg:col-span-2">
         <GlassCard>
-          <h2 className="text-2xl font-bold mb-6">Create New Escrow</h2>
-          
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <div>
-              <label className="block text-sm font-medium mb-2">
-                Freelancer Address
-              </label>
-              <input
-                type="text"
-                value={payee}
-                onChange={(e) => setPayee(e.target.value)}
-                placeholder="aleo1..."
-                className="w-full px-4 py-3 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:border-purple-500"
-                required
-              />
-              <p className="text-sm text-gray-400 mt-1">
-                Enter the Aleo wallet address of the freelancer. He must have registered as a freelancer.
-              </p>
-            </div>
+      <h2 className="text-2xl font-bold mb-6">Create New Escrow</h2>
+      
+      {initialFreelancer && (
+        <div className="mb-4 p-3 bg-purple-500/20 rounded-lg">
+          <p className="text-sm text-purple-400">Selected Freelancer:</p>
+          <p className="font-mono text-sm">{initialFreelancer}</p>
+        </div>
+      )}
+      
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="block text-sm font-medium mb-2">
+            Freelancer Address
+          </label>
+          <input
+            type="text"
+            value={payee}
+            onChange={(e) => setPayee(e.target.value)}
+            readOnly={!!initialFreelancer} // Make read-only if pre-selected
+            className={`w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:border-purple-500 font-mono text-sm ${
+              initialFreelancer ? 'opacity-75' : ''
+            }`}
+            placeholder="aleo1..."
+            required
+          />
+        </div>
             
             <div>
               <label className="block text-sm font-medium mb-2">

@@ -18,6 +18,7 @@ import { UserRole, Escrow, UserStats } from "./types";
 
 // import MilestoneSubmission from "./components/MilestoneSubmission";
 import * as THREE from "three";
+import BrowseFreelancers from "./components/create/BrowseFreelancers";
 // type UserRole = "client" | "freelancer" | null;
 // type EscrowStatus = "active" | "completed" | "disputed";
 type Skill = string;
@@ -517,6 +518,7 @@ export default function Home() {
           })
         ]);
       }
+        setSelectedFreelancer("");
       loadProjects();
       loadUserStats();
     };
