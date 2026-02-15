@@ -1,31 +1,31 @@
-import { Program } from '@aleohq/sdk';
+export const fetchTransactionDetails = async (finalTxId: string) => {
+  const response = await fetch(
+    `https://api.provable.com/v2/testnet/transaction/${finalTxId}`,
+    {
+      headers: { 'Accept': 'application/json' },
+    }
+  );
 
-const programId = 'freelancing_platform.aleo';
-
-export const aleoClient = {
-  async executeTransaction(
-    functionName: string,
-    inputs: string[],
-    fee: number
-  ) {
-    console.log(`Executing ${functionName} with inputs:`, inputs);
-    return null;
-  },
-  
-  async getRecords(address: string) {
-    return [];
-  },
-  
-  async decryptRecord(ciphertext: string) {
-    return ciphertext;
-  },
-  
-  async generateEscrowId(callerAddress: string): Promise<string> {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(callerAddress + Date.now());
-    const hashBuffer = await crypto.subtle.digest('SHA-256', data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-    return hashHex.slice(0, 64); // Return first 64 chars as field
+  if (!response.ok) {
+    throw new Error(`Failed to fetch transaction: ${response.statusText}`);
   }
+
+  return response.json();
+};
+
+export const extractEscrowIdFromTxDetails = (txDetails: any): string => {
+  const transitions = txDetails?.execution?.transitions || [];
+  
+  for (const transition of transitions) {
+    if (transition.function === "create_escrow") {
+      const futureOutput = transition.outputs?.find((output: any) => output.type === "future");
+      
+      if (futureOutput?.value?.arguments?.[0]) {
+        // Remove "field" suffix if present
+        return futureOutput.value.arguments[0].replace('field', '');
+      }
+    }
+  }
+  
+  throw new Error("Escrow ID not found in transaction");
 };

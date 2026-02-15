@@ -5,8 +5,10 @@ interface CreateProjectProps {
   onSubmit: (payee: string, amount: number, description: string) => void;
   loading: boolean;
   userStats: UserStats;
+   initialFreelancer:string
 }
 
-export default function CreateProject({ onSubmit, loading, userStats }: CreateProjectProps) {
-  return <EscrowForm onSubmit={onSubmit} loading={loading} userStats={userStats} />;
+export default function CreateProject({ onSubmit, loading, userStats,initialFreelancer }: CreateProjectProps) {
+  return <EscrowForm onSubmit={onSubmit} loading={loading} userStats={userStats} 
+   initialFreelancer={initialFreelancer} />;
 }

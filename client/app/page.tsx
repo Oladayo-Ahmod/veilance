@@ -613,7 +613,7 @@ export default function Home() {
       const supabase = createSupabaseClient();
       const { data: escrow } = await supabase.from("escrows").select("*").eq("id", escrowId).single();
       if (!escrow) throw new Error("Escrow not found");
-
+      console.log(escrow)
       const tx = await executeTransaction({
         program: "freelancing_platform_v1.aleo",
         function: "submit_milestone",
@@ -710,6 +710,7 @@ export default function Home() {
       const interval = setInterval(async () => {
         try {
           const status = await transactionStatus?.(txId);
+          console.log(status,'status')
           if (!status) return;
 
           if (status.status !== "pending") {
@@ -929,7 +930,12 @@ export default function Home() {
 
               {activeTab === "create" &&
                 (userRole === "client" ? (
-                  <CreateProject onSubmit={createEscrow} loading={loading} userStats={userStats} />
+                  <CreateProject 
+                  onSubmit={createEscrow}
+                  loading={loading}
+                  userStats={userStats}
+                   initialFreelancer={selectedFreelancer}
+                  />
                 ) : (
                   <FindWork />
                 ))}
