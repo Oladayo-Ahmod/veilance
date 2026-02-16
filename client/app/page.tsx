@@ -789,7 +789,7 @@ const approveMilestone = async (escrowId: string) => {
     console.log("Found matching escrow record:", escrowRecord);
 
     // Get the record ciphertext
-    const ciphertext = escrowRecord.recordCiphertext;
+    const ciphertext = (escrowRecord as any)?.recordCiphertext;
     
     if (!ciphertext) {
       throw new Error("No ciphertext found in escrow record");
