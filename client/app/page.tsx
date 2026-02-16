@@ -258,7 +258,7 @@ export default function Home() {
 
     try {
       const tx = await executeTransaction({
-        program: "freelancing_platform_v1.aleo",
+        program: "freelancing_platform_v2.aleo",
         function: "register_client",
         inputs: [],
         fee: 100000,
@@ -349,7 +349,7 @@ export default function Home() {
       const skillInput = `[${skillFields.join(",")}]`;
       console.log(skillInput)
       const tx = await executeTransaction({
-        program: "freelancing_platform_v1.aleo",
+        program: "freelancing_platform_v2.aleo",
         function: "register_freelancer",
         inputs: [skillInput],
         fee: 100000,
@@ -403,7 +403,7 @@ export default function Home() {
     };
 
     try {
-      const records = await requestRecords?.("freelancing_platform_v1.aleo", false);
+      const records = await requestRecords?.("freelancing_platform_v2.aleo", false);
       console.log(records)
       const clientRecordObj = records?.find((r: any) => {
         const isOwner = r.owner === address || r.sender === address;
@@ -427,7 +427,7 @@ export default function Home() {
       console.log(microcreditsAmount)
 
       const tx = await executeTransaction({
-        program: "freelancing_platform_v1.aleo",
+        program: "freelancing_platform_v2.aleo",
         function: "deposit_funds",
         inputs: [
           decryptedRecord,
@@ -533,7 +533,7 @@ export default function Home() {
     };
 
     try {
-      const records = await requestRecords?.("freelancing_platform_v1.aleo", false);
+      const records = await requestRecords?.("freelancing_platform_v2.aleo", false);
       console.log(records)
       const clientRecordObj = records?.find((r: any) => {
         const isOwner = r.owner === address || r.sender === address || r.owner?.includes(address);
@@ -556,7 +556,7 @@ export default function Home() {
       console.log(description)
 
       const tx = await executeTransaction({
-        program: "freelancing_platform_v1.aleo",
+        program: "freelancing_platform_v2.aleo",
         function: "create_escrow",
         inputs: [
           payee,
@@ -641,7 +641,7 @@ export default function Home() {
       if (!escrow) throw new Error("Escrow not found");
       console.log(escrow)
       const tx = await executeTransaction({
-        program: "freelancing_platform_v1.aleo",
+        program: "freelancing_platform_v2.aleo",
         function: "submit_milestone",
         inputs: [`${escrow.escrow_id_field}field`],
         fee: 100000,
@@ -661,14 +661,14 @@ export default function Home() {
         if (escrow) await updateMilestoneInDb("accepted_tx", escrow);
         showNotification("Milestone submission broadcasted!");
       } else {
-        showNotification(`Error: ${errorString}`);
+        showNotification(`Error: ${errorString}`); 
       }
     } finally {
       setLoading(false);
     }
   };
 
- const approveMilestone = async (escrowId: string) => {
+const approveMilestone = async (escrowId: string) => {
   if (!executeTransaction || !address) return;
   setLoading(true);
 
@@ -691,6 +691,20 @@ export default function Home() {
       amount: escrow.milestone_amounts[escrow.milestone],
     });
 
+      if (isCompleted) {
+    // Increment freelancer's completed projects
+    await supabase.rpc("increment_freelancer_completed_projects", {
+      freelancer_address: escrow.freelancer_address
+    });
+    
+    // Increment client's completed projects
+    await supabase.rpc("increment_client_completed_projects", {
+      client_address: escrow.client_address
+    });
+    
+    console.log(`Project ${escrow.id} completed! Both parties credited.`);
+  }
+
     showNotification("Funds released!");
     loadProjects();
     loadUserStats();
@@ -699,62 +713,74 @@ export default function Home() {
   try {
     const supabase = createSupabaseClient();
     
-    // Get escrow details
     const { data: escrow } = await supabase.from("escrows").select("*").eq("id", escrowId).single();
     if (!escrow) throw new Error("Escrow not found");
 
-    // Get the transaction ID for this escrow from transactions table
-    const { data: transaction } = await supabase
-      .from("transactions")
-      .select("transaction_id")
-      .eq("escrow_id", escrowId)
-      .eq("function_name", "create_escrow")
-      .single();
+    console.log("Escrow from DB:", escrow);
+    console.log("Current milestone:", escrow.milestone);
 
-    if (!transaction) {
-      throw new Error("Transaction record not found for this escrow");
+    let transactionQuery;
+    
+    if (escrow.milestone === 0) {
+      // First milestone - need the create_escrow record
+      transactionQuery = await supabase
+        .from("transactions")
+        .select("transaction_id")
+        .eq("escrow_id", escrowId)
+        .eq("function_name", "create_escrow")
+        .single();
+    } else {
+      // Second milestone - need the first approve_and_release record
+      transactionQuery = await supabase
+        .from("transactions")
+        .select("transaction_id")
+        .eq("escrow_id", escrowId)
+        .eq("function_name", "approve_and_release")
+        .order("created_at", { ascending: true })
+        .limit(1)
+        .single();
     }
 
-    console.log("Escrow from DB:", escrow);
-    console.log("Transaction ID for this escrow:", transaction.transaction_id);
+    if (!transactionQuery.data) {
+      throw new Error(`Transaction record not found for milestone ${escrow.milestone}`);
+    }
+
+    const transaction = transactionQuery.data;
+    console.log(`Using transaction ID for milestone ${escrow.milestone}:`, transaction.transaction_id);
 
     // Get records from Aleo
-    const records = await requestRecords?.("freelancing_platform_v1.aleo", false);
+    const records = await requestRecords?.("freelancing_platform_v2.aleo", false);
     console.log("All records:", records);
 
     // Find the specific Escrow record that matches the transaction ID
     const escrowRecord = records?.find((r: any) => {
       // Check if it's an Escrow record and not spent
-      // normalize record name and transaction id for comparison
-      const functionName = r.functionName?.toString().trim().toLowerCase();
-      const isEscrowRecord = functionName === "create_escrow" || functionName === "approve_and_release";
+      const isEscrowRecord = r.recordName === "Escrow";
       const isNotSpent = r.spent === false;
       
-      // log full record for debugging, including potential hidden characters
-      console.log("Inspecting record:", JSON.stringify(r));
-      console.log(`Checking record: ${r.functionName}, spent: ${r.spent}, transactionId: '${r.transactionId}', db transactionId: '${transaction.transaction_id}'`);
+      if (!isEscrowRecord || !isNotSpent) return false;
 
-      // Match by transaction ID (trim whitespace and normalize case)
+      console.log(`Checking record: ${r.functionName}, spent: ${r.spent}, transactionId: '${r.transactionId}'`);
+
+      // Match by transaction ID 
       const txIdA = r.transactionId?.toString().trim().toLowerCase();
       const txIdB = transaction.transaction_id?.toString().trim().toLowerCase();
       const matchesTransactionId = txIdA === txIdB;
 
-      if (!matchesTransactionId) {
-        console.log("Transaction ID mismatch after normalization:", { txIdA, txIdB });
+      if (matchesTransactionId) {
+        console.log("Found matching record by transaction ID!");
+        return true;
       }
 
-      // Also check if it matches the escrow_id_field (optional)
-      // Note: The recordCiphertext is encrypted, so we can't check its content
-      
-      return isEscrowRecord && isNotSpent && matchesTransactionId;
-    }) as any;
+      return false;
+    });
 
     if (!escrowRecord) {
       console.error("Available records:", records?.map((r: any) => ({ 
-        functionName: r.recordName, 
+        recordName: r.recordName,
+        functionName: r.functionName, 
         spent: r.spent,
-        transactionId: r.transactionId,
-        function_Name: r.functionName 
+        transactionId: r.transactionId
       })));
       
       throw new Error(`Escrow record not found for transaction ${transaction.transaction_id}`);
@@ -763,7 +789,7 @@ export default function Home() {
     console.log("Found matching escrow record:", escrowRecord);
 
     // Get the record ciphertext
-    const ciphertext = (escrowRecord as any)?.recordCiphertext;
+    const ciphertext = escrowRecord.recordCiphertext;
     
     if (!ciphertext) {
       throw new Error("No ciphertext found in escrow record");
@@ -778,7 +804,7 @@ export default function Home() {
 
     // Execute transaction with ONLY 2 inputs (as per contract)
     const tx = await executeTransaction({
-      program: "freelancing_platform_v1.aleo",
+      program: "freelancing_platform_v2.aleo",
       function: "approve_and_release",
       inputs: [
         `${escrow.escrow_id_field}field`,  // escrow_id from explorer
@@ -795,6 +821,21 @@ export default function Home() {
     if (txId) {
       await pollTransaction(txId);
       await finalizeApprovalInDb(escrow);
+      
+      // After successful approval, store the new approve_and_release transaction
+      // for the next milestone
+      if (escrow.milestone === 0) {
+        await supabase.from("transactions").insert({
+          transaction_id: txId,
+          function_name: "approve_and_release",
+          caller_address: address,
+          related_addresses: [escrow.freelancer_address],
+          status: "accepted",
+          inputs: JSON.stringify({ escrow_id: escrow.escrow_id_field }),
+          escrow_id: escrowId,
+        });
+      }
+      
       showNotification("Milestone approved and payment released!");
     }
 
@@ -903,7 +944,7 @@ const pollTransaction = async (tempTxId: string): Promise<string> => {
 
     try {
       // Find the client record
-      const records = await requestRecords?.("freelancing_platform_v1.aleo", false);
+      const records = await requestRecords?.("freelancing_platform_v2.aleo", false);
 
       const clientRecordObj = records?.find((r: any) => {
         const isOwner = r.owner === address || r.sender === address || r.owner?.includes(address);
@@ -928,7 +969,7 @@ const pollTransaction = async (tempTxId: string): Promise<string> => {
 
       // Execute the withdraw transaction
       const tx = await executeTransaction({
-        program: "freelancing_platform_v1.aleo",
+        program: "freelancing_platform_v2.aleo",
         function: "withdraw_funds",
         inputs: [
           decryptedRecord || ciphertext,
