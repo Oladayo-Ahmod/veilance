@@ -663,69 +663,154 @@ export default function Home() {
       setLoading(false);
     }
   };
-  const approveMilestone = async (escrowId: string) => {
-    if (!executeTransaction || !address) return;
-    setLoading(true);
 
-    const finalizeApprovalInDb = async (escrow: any) => {
-      const supabase = createSupabaseClient();
-      const nextMilestone = escrow.milestone + 1;
-      const isCompleted = nextMilestone >= escrow.total_milestones;
+ const approveMilestone = async (escrowId: string) => {
+  if (!executeTransaction || !address) return;
+  setLoading(true);
 
-      await supabase.from("escrows").update({
-        milestone: nextMilestone,
-        remaining_amount: escrow.remaining_amount - escrow.milestone_amounts[escrow.milestone],
-        current_milestone_submitted: false,
-        status: isCompleted ? "completed" : "active",
-        aleo_status: isCompleted ? 1 : 0,
-        completed_at: isCompleted ? new Date().toISOString() : null,
-      }).eq("id", escrowId);
+  const finalizeApprovalInDb = async (escrow: any) => {
+    const supabase = createSupabaseClient();
+    const nextMilestone = escrow.milestone + 1;
+    const isCompleted = nextMilestone >= escrow.total_milestones;
 
-      await supabase.rpc("increment_earned_balance", {
-        freelancer_address: escrow.freelancer_address,
-        amount: escrow.milestone_amounts[escrow.milestone],
-      });
+    await supabase.from("escrows").update({
+      milestone: nextMilestone,
+      remaining_amount: escrow.remaining_amount - escrow.milestone_amounts[escrow.milestone],
+      current_milestone_submitted: false,
+      status: isCompleted ? "completed" : "active",
+      aleo_status: isCompleted ? 1 : 0,
+      completed_at: isCompleted ? new Date().toISOString() : null,
+    }).eq("id", escrowId);
 
-      showNotification("Funds released!");
-      loadProjects();
-      loadUserStats();
-    };
+    await supabase.rpc("increment_earned_balance", {
+      freelancer_address: escrow.freelancer_address,
+      amount: escrow.milestone_amounts[escrow.milestone],
+    });
 
-    try {
-      const supabase = createSupabaseClient();
-      const { data: escrow } = await supabase.from("escrows").select("*").eq("id", escrowId).single();
-      if (!escrow) throw new Error("Escrow not found");
-
-      const records = await requestRecords?.("freelancing_platform_v1.aleo", false);
-      const freelancerRecord = records?.find((r: any) => typeof r === "string" && r.includes(escrow.freelancer_address));
-      if (!freelancerRecord) throw new Error("Freelancer record not found");
-
-      const decEscrow = escrow.aleo_escrow_record ? await decrypt?.(escrow.aleo_escrow_record) : undefined;
-      const decFreelancer = await decrypt?.(freelancerRecord as string);
-
-      const tx = await executeTransaction({
-        program: "freelancing_platform_v1.aleo",
-        function: "approve_and_release",
-        inputs: [`${escrow.escrow_id_field}field`, decEscrow || escrow.aleo_escrow_record || "", decFreelancer || freelancerRecord],
-        fee: 150000,
-        privateFee: false,
-      });
-
-      if (tx) {
-        await finalizeApprovalInDb(escrow);
-      }
-    } catch (error: any) {
-      const errorString = error?.message || String(error);
-      if (errorString.includes("Accepted")) {
-        const { data: escrow } = await createSupabaseClient().from("escrows").select("*").eq("id", escrowId).single();
-        if (escrow) await finalizeApprovalInDb(escrow);
-      } else {
-        showNotification(`Error: ${errorString}`);
-      }
-    } finally {
-      setLoading(false);
-    }
+    showNotification("Funds released!");
+    loadProjects();
+    loadUserStats();
   };
+
+  try {
+    const supabase = createSupabaseClient();
+    
+    // Get escrow details
+    const { data: escrow } = await supabase.from("escrows").select("*").eq("id", escrowId).single();
+    if (!escrow) throw new Error("Escrow not found");
+
+    // Get the transaction ID for this escrow from transactions table
+    const { data: transaction } = await supabase
+      .from("transactions")
+      .select("transaction_id")
+      .eq("escrow_id", escrowId)
+      .eq("function_name", "create_escrow")
+      .single();
+
+    if (!transaction) {
+      throw new Error("Transaction record not found for this escrow");
+    }
+
+    console.log("Escrow from DB:", escrow);
+    console.log("Transaction ID for this escrow:", transaction.transaction_id);
+
+    // Get records from Aleo
+    const records = await requestRecords?.("freelancing_platform_v1.aleo", false);
+    console.log("All records:", records);
+
+    // Find the specific Escrow record that matches the transaction ID
+    const escrowRecord = records?.find((r: any) => {
+      // Check if it's an Escrow record and not spent
+      // normalize record name and transaction id for comparison
+      const recordName = r.recordName?.toString().trim().toLowerCase();
+      const isEscrowRecord = recordName === "escrow";
+      const isNotSpent = r.spent === false;
+      
+      // log full record for debugging, including potential hidden characters
+      console.log("Inspecting record:", JSON.stringify(r));
+      console.log(`Checking record: ${r.recordName}, spent: ${r.spent}, transactionId: '${r.transactionId}', db transactionId: '${transaction.transaction_id}'`);
+
+      // Match by transaction ID (trim whitespace and normalize case)
+      const txIdA = r.transactionId?.toString().trim().toLowerCase();
+      const txIdB = transaction.transaction_id?.toString().trim().toLowerCase();
+      const matchesTransactionId = txIdA === txIdB;
+
+      if (!matchesTransactionId) {
+        console.log("Transaction ID mismatch after normalization:", { txIdA, txIdB });
+      }
+
+      // Also check if it matches the escrow_id_field (optional)
+      // Note: The recordCiphertext is encrypted, so we can't check its content
+      
+      return isEscrowRecord && isNotSpent && matchesTransactionId;
+    }) as any;
+
+    if (!escrowRecord) {
+      console.error("Available records:", records?.map((r: any) => ({ 
+        recordName: r.recordName, 
+        spent: r.spent,
+        transactionId: r.transactionId,
+        functionName: r.functionName 
+      })));
+      
+      throw new Error(`Escrow record not found for transaction ${transaction.transaction_id}`);
+    }
+
+    console.log("Found matching escrow record:", escrowRecord);
+
+    // Get the record ciphertext
+    const ciphertext = (escrowRecord as any)?.recordCiphertext;
+    
+    if (!ciphertext) {
+      throw new Error("No ciphertext found in escrow record");
+    }
+
+    // Decrypt the escrow record
+    const decryptedEscrow = await decrypt?.(ciphertext);
+    console.log("Decrypted escrow:", decryptedEscrow);
+
+    // Use the decrypted record or fallback to ciphertext
+    const escrowInput = decryptedEscrow || ciphertext;
+
+    // Execute transaction with ONLY 2 inputs (as per contract)
+    const tx = await executeTransaction({
+      program: "freelancing_platform_v1.aleo",
+      function: "approve_and_release",
+      inputs: [
+        `${escrow.escrow_id_field}field`,  // escrow_id from explorer
+        escrowInput                          // escrow record
+      ],
+      fee: 150000,
+      privateFee: false,
+    });
+
+    console.log("Transaction response:", tx);
+
+    const txId = typeof tx === "string" ? tx : tx?.transactionId;
+    
+    if (txId) {
+      await pollTransaction(txId);
+      await finalizeApprovalInDb(escrow);
+      showNotification("Milestone approved and payment released!");
+    }
+
+  } catch (error: any) {
+    const errorString = error?.message || String(error);
+    console.error("Approve milestone error:", error);
+    
+    if (errorString.includes("Accepted")) {
+      const { data: escrow } = await createSupabaseClient().from("escrows").select("*").eq("id", escrowId).single();
+      if (escrow) {
+        await finalizeApprovalInDb(escrow);
+        showNotification("Milestone approval submitted!");
+      }
+    } else {
+      showNotification(`Error: ${errorString}`);
+    }
+  } finally {
+    setLoading(false);
+  }
+};
 
 const pollTransaction = async (tempTxId: string): Promise<string> => {
   return new Promise((resolve, reject) => {
