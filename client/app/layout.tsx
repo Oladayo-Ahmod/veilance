@@ -30,7 +30,7 @@ export default function RootLayout({
         <AleoWalletProvider
           wallets={wallets}
           network={Network.TESTNET}
-          autoConnect={false}
+          autoConnect={true}
           decryptPermission={DecryptPermission.UponRequest}
           programs={[programName]}
           onError={(error) => console.error(error)}

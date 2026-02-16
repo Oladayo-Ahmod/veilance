@@ -520,6 +520,10 @@ export default function Home() {
             title: "New Escrow Created",
             message: `You have been assigned to a new project: ${description}`,
             related_escrow_id: escrowData.id,
+          }),
+          supabase.rpc("decrement_balance", {
+            user_address: address,
+            amount: amount,
           })
         ]);
       }
