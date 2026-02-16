@@ -1,0 +1,148 @@
+{
+  "type": "deploy",
+  "id": "at182ufduzqs2srrmgz27emrvmp75fwz38vngmt6q298sdn26wc0gzqdpsy88",
+  "owner": {
+    "address": "aleo1jymrvex0wwfrn6pgn5utqghpxxapcflmmja7qkqnyza6fv8m0cgqqa2866",
+    "signature": "sign1w9h62cx76pk2stkhxp55cjzn0ptx06qtcwxu3uua9hjtsu6fq5qmgynnjz5cfuw5w0l2v3fn0x7kt5hxwkhm66zuaf5tg5ec082tqqaj8myzx7kvkl0m5rrvpp2jp9p7lmqzl2zlmrwpqgz9mypgh5l7qa6ar2vc3snf4xutll2t8alfe02gc33ngvhqpnw730mjm6f04n9svrt84ud"
+  },
+  "deployment": {
+    "edition": 0,
+    "program": "import credits.aleo;\n\nprogram freelancing_platform_v2.aleo;\n\nrecord Client:\n    owner as address.private;\n    escrow_balance as u64.private;\n    rating as u8.private;\n    completed_projects as u32.private;\n\nrecord Freelancer:\n    owner as address.private;\n    rating as u8.private;\n    skills as [field; 5u32].private;\n    completed_projects as u32.private;\n\nrecord Escrow:\n    owner as address.private;\n    payee as address.private;\n    remaining_amount as u64.private;\n    milestone as u8.private;\n    total_milestones as u8.private;\n    milestone_amounts as [u64; 2u32].private;\n    description as field.private;\n    status as u8.private;\n\nmapping escrows:\n    key as field.public;\n    value as boolean.public;\n\nmapping milestone_submitted:\n    key as field.public;\n    value as boolean.public;\n\nmapping freelancer_balances:\n    key as address.public;\n    value as u64.public;\n\nmapping freelancer_stats:\n    key as address.public;\n    value as u32.public;\n\nfunction register_client:\n    cast self.caller into r0 as address;\n    cast r0 0u64 0u8 0u32 into r1 as Client.record;\n    output r1 as Client.record;\n\nfunction register_freelancer:\n    input r0 as [field; 5u32].private;\n    cast self.caller into r1 as address;\n    cast r1 5u8 r0 0u32 into r2 as Freelancer.record;\n    output r2 as Freelancer.record;\n\nfunction deposit_funds:\n    input r0 as Client.record;\n    input r1 as u64.private;\n    assert.eq r0.owner self.caller;\n    call credits.aleo/transfer_public_as_signer freelancing_platform_v2.aleo r1 into r2;\n    add r0.escrow_balance r1 into r3;\n    cast r0.owner r3 r0.rating r0.completed_projects into r4 as Client.record;\n    async deposit_funds r2 into r5;\n    output r4 as Client.record;\n    output r5 as freelancing_platform_v2.aleo/deposit_funds.future;\n\nfinalize deposit_funds:\n    input r0 as credits.aleo/transfer_public_as_signer.future;\n    await r0;\n\nfunction create_escrow:\n    input r0 as address.private;\n    input r1 as u64.private;\n    input r2 as [u64; 2u32].private;\n    input r3 as field.private;\n    input r4 as Client.record;\n    assert.eq r4.owner self.caller;\n    gte r4.escrow_balance r1 into r5;\n    assert.eq r5 true;\n    hash.psd2 r4 into r6 as field;\n    cast self.caller into r7 as address;\n    cast r7 r0 r1 0u8 2u8 r2 r3 0u8 into r8 as Escrow.record;\n    sub r4.escrow_balance r1 into r9;\n    cast r4.owner r9 r4.rating r4.completed_projects into r10 as Client.record;\n    async create_escrow r6 into r11;\n    output r8 as Escrow.record;\n    output r10 as Client.record;\n    output r11 as freelancing_platform_v2.aleo/create_escrow.future;\n\nfinalize create_escrow:\n    input r0 as field.public;\n    set true into escrows[r0];\n    set false into milestone_submitted[r0];\n\nfunction submit_milestone:\n    input r0 as field.private;\n    async submit_milestone r0 into r1;\n    output r1 as freelancing_platform_v2.aleo/submit_milestone.future;\n\nfinalize submit_milestone:\n    input r0 as field.public;\n    get escrows[r0] into r1;\n    assert.eq r1 true;\n    set true into milestone_submitted[r0];\n\nfunction approve_and_release:\n    input r0 as field.private;\n    input r1 as Escrow.record;\n    assert.eq r1.owner self.caller;\n    is.eq r1.status 0u8 into r2;\n    assert.eq r2 true;\n    is.eq r1.milestone 0u8 into r3;\n    ternary r3 r1.milestone_amounts[0u32] r1.milestone_amounts[1u32] into r4;\n    add r1.milestone 1u8 into r5;\n    gte r5 r1.total_milestones into r6;\n    sub r1.remaining_amount r4 into r7;\n    ternary r6 1u8 0u8 into r8;\n    cast r1.owner r1.payee r7 r5 r1.total_milestones r1.milestone_amounts r1.description r8 into r9 as Escrow.record;\n    async approve_and_release r0 r1.payee r4 into r10;\n    output r9 as Escrow.record;\n    output r10 as freelancing_platform_v2.aleo/approve_and_release.future;\n\nfinalize approve_and_release:\n    input r0 as field.public;\n    input r1 as address.public;\n    input r2 as u64.public;\n    get.or_use freelancer_balances[r1] 0u64 into r3;\n    add r3 r2 into r4;\n    set r4 into freelancer_balances[r1];\n    get milestone_submitted[r0] into r5;\n    assert.eq r5 true;\n    set false into milestone_submitted[r0];\n\nfunction withdraw_funds:\n    input r0 as Client.record;\n    input r1 as u64.private;\n    assert.eq r0.owner self.caller;\n    gte r0.escrow_balance r1 into r2;\n    assert.eq r2 true;\n    call credits.aleo/transfer_public self.caller r1 into r3;\n    sub r0.escrow_balance r1 into r4;\n    cast r0.owner r4 r0.rating r0.completed_projects into r5 as Client.record;\n    async withdraw_funds r3 into r6;\n    output r5 as Client.record;\n    output r6 as freelancing_platform_v2.aleo/withdraw_funds.future;\n\nfinalize withdraw_funds:\n    input r0 as credits.aleo/transfer_public.future;\n    await r0;\n\nfunction freelancer_withdraw:\n    input r0 as u64.private;\n    call credits.aleo/transfer_public self.caller r0 into r1;\n    async freelancer_withdraw r1 self.caller r0 into r2;\n    output r2 as freelancing_platform_v2.aleo/freelancer_withdraw.future;\n\nfinalize freelancer_withdraw:\n    input r0 as credits.aleo/transfer_public.future;\n    input r1 as address.public;\n    input r2 as u64.public;\n    await r0;\n    get freelancer_balances[r1] into r3;\n    gte r3 r2 into r4;\n    assert.eq r4 true;\n    sub r3 r2 into r5;\n    set r5 into freelancer_balances[r1];\n\nfunction cancel_escrow:\n    input r0 as field.private;\n    input r1 as Escrow.record;\n    input r2 as Client.record;\n    assert.eq r1.owner self.caller;\n    assert.eq r2.owner self.caller;\n    assert.eq r1.status 0u8;\n    add r2.escrow_balance r1.remaining_amount into r3;\n    cast r2.owner r3 r2.rating r2.completed_projects into r4 as Client.record;\n    async cancel_escrow r0 into r5;\n    output r4 as Client.record;\n    output r5 as freelancing_platform_v2.aleo/cancel_escrow.future;\n\nfinalize cancel_escrow:\n    input r0 as field.public;\n    get escrows[r0] into r1;\n    assert.eq r1 true;\n    set false into escrows[r0];\n\nconstructor:\n    assert.eq edition 0u16;\n",
+    "verifying_keys": [
+      [
+        "register_client",
+        [
+          "verifier1qygqqqqqqqqqqqqyw5qqqqqqqqqpxagqqqqqqqqqp8jsqqqqqqqqpy82qqqqqqqqqq9twqqqqqqqqqqvqqqqqqqqqqqtkujdwp3qxs8zh3dv6p0alxs38qamgjqp0ujkky0qu7t9jxpqcpypk0cjwgplhk4wcsfg65le6aspghmpc9jaxgdjz7vpg3agfdual6etvj9mcjgldshzuw780gwrq3pzkgct3mlyg6yaf6q7kpxdhrespagf236wfsjfrs5n5mjghj8qu3yznj3wvf42d7z4070vlz3l5r9fajpn64a722yt45nqavkxmeavsqsvtk9cettk26mdpwra3q8jh82xwvr39ym7t6yxxf33ffcya0jd94wjr63du9athdgkd6f32vyecqwnf2vuz3ecc33nefkjr6ehq0crralgz2fsnjyqahvr5w0uzpynracszrdx64zqzakswuyggh5ngvqm3qwl35cs3hvu9q79y5p9uzdktm9avzs6l4gjlremfgyj5jlqfn5y6wxnjcw8lljaem0yh5lv39sppkqnc4ff05k8zqay65gwguafkvsycsvsa3qxcunjke6rq3jqwh756yw3ukr5cvh85vnvz5fxlyyczxwwxf7rhdkrercglry3ez47ekn6d9lfs3fxnqvrg59hhn79k9gmn85s24gz5sg0za3adh30slxdqpnv2ndufa26fqhxhg3tpplry35qw9efuwv8ka05lqf4r05cun7t9x3lmarpn66mq3r8zg8ejyrp8qd9p8xx32mkpwc4d7pzy9tydvumqes3dhnteqfdyu0n3g3cnvxcn58lvznwxssfx3x2j4dmllh03sqxt8d47jlgdy4rrtj84z32qa9m6xa3vwkaryllwu92jn688lmvljurgn5dmu3wlphaj5rdcmly5egquxjxltd0stua5muyfskergjwt75jlsx4amjhkvdnpqhy32vlet2smm5uy3p2jruk7x997n6fwppqp8x98t28kkdr6tlx6pjahlrj6wg0ahg05cp9cmg402y5gaaejhflexwqqqqqqqqqqg5zjvy",
+          "certificate1qyqsqqqqqqqqqq8y5c8hngv65ajnfgrxul7alm5vfd2lnwp5kpzjkpvthrpr6zqgmj7k8vdh3nex4eg6fdgenzzj2cqqqrm0q20"
+        ]
+      ],
+      [
+        "register_freelancer",
+        [
+          "verifier1qygqqqqqqqqqqq9z4qqqqqqqqqqvf2qqqqqqqqqqqdkszqqqqqqqplmqqyqqqqqqqrvsuqgqqqqqqqqvqqqqqqqqqqqvnxjcr3kumpxj2r3425mm6gav95d3eu6p5uavyq90nnjs0nhaw7gptaku0ua9x7yg4dns7h9aueyqxan0xda78aemneykvh3nudphqxlne88umuj63a2ydpsl4yzmqg8kg97takgnu2p5g9n2466l5ywqpux84g8uyxxuz98e6ep035lqm2qpayhk3g2a5pex7z2yd5wptlvme4lchc6pl2pr0tncjxs2a8yyqx3k4dn5r894g4ssqak9qs3uvereslznhlkgvhuaweet8avul999k6wavl7junh2kqat0pfxyxk2zq8qzncj837jxt8nwkepyf49wqm520wfhy5kaz87jp9jhy5p3uv2hgvlraaejk98xwws8q89zjjdgqq2zld0hxycvsgp5cxalmt5qxvfngphv8ua7gpvtgj0jjrhwfcqd0xkjszeuz8m3zxt6p0ess36q5sprjen7y0cafzvss3qpqgqyguket0vtkafvc2neenc485sq6w8zrj8t8p4lskh67rl7zn4y8p0aglsrepetd6lqjka4w92gs90hq7a9snstyugntu7uflp59cqqvgf30g3jg5y4ruc6n30jwmm07vwgfhvqqnt37z8hau06q4dssa2c5xfcpwsh3m7euu7lms3k38e26jngh03mr89gtf0rp9fj9jencmvye2stq09c8r6adle7elg5n9z0cz9t7cgttfmnlr383dl4x9ej9zkh72zmutzzqfnns88vdgynh76nqf896q5zsysc2zw0ssh00fn4ce0s8mj4uf64lvd0sjxwfrzdgytsrfz5tkrd089tkn505g37kjxcupkj4cp7tv886vm8lc9qu4n7vhllstlyru9cg0hzjr9hj8ljunvxeurm4c2dl8y4g4gveuxxcuu8czhwrwcprd0sc44lqsjkma056e89aenm8hd2hpa8fw5tgwfph9pmmrct6j28lgsqqqqqqqqq0lgtc6",
+          "certificate1qyqsqqqqqqqqqqy47v0933mwn09wa5mesqx5qxhgczm67wdd3ngrw7fhtnkz6q4hzl48swvx9atyanppl239ksu7pqqqqggrjrh"
+        ]
+      ],
+      [
+        "deposit_funds",
+        [
+          "verifier1qysqqqqqqqqqqqra6yqqqqqqqqqf95gqqqqqqqqq32kszqqqqqqqpelxqyqqqqqqqrznjqgqqqqqqqqvqqqqqqqqqqq923fj7jmdded8mk4vcsufu8np40k5hln50gp0rj857qm9m92gezfpnpu8lljgyfzthp9mpgnd44uq2zw9ay5eg2v4kajr5f84kgxgna4tq7hrg8lc20fzh9u0327wgd7h082jxm2khlrmtrqhyf5gl7dgqsc3fhn4l2a8lrmfk36lnrn4q4xmhxex7vt5v09e77c843pxqdudhmuu8te3q8t9l08j97ytn3zyqxcsanwzp40vraa96xyex2yt0yql9hg4kxwmyc548an3etuvm9klk0c6n07c679csp9zzcn38e5etqfzx5stpd98ajylp0nje7z2lvp28unq5h3lathkx59d4dmuk0mhf3txp8z4tc2gcfl4tmhlan6dt2qpm2mynuwftvv2jsa658sxtugpru8aadnefcsp6c0lld6p6svuvppyl92e3g2v6j99rc59ynejlg5qqlyzk6kva05r0yfaxf4w5l3ch6negvap7g0f28mem8685hh5sxpm285ev3vdvhmgkf59ut0t9gnqqmw9p6q8tvfuql7g22vg6je4ed5y88wtfxh7uh7n0x40l7zxp5tfrde22cpwdelh6tjzkyqll6e9s8avzpmu3m90dumjjgw5npg96yl2djwlmhwnz6aj68pwp6gwycq690yyr0andkgqfnwppc9zmvd32qdzz57fnqswjz3arttta8hh2ddv7n03w9nf95cr0wwknpjhlaqzvax7svuahw39v00kqnvnmg25wcqwhef2ha2w30uaft09x8pt7x6pgekey0uq0wnz902zghkzwsdp9xsv6rf0hg5hh3wn0lhy0dv2k8uq8ckxaw33yuu8auq6d95hvdz855gga9zlvnknqmasurmzyk8n85cchyafm36fw47lf3lztjrz7qysqc9gycqx0vt0anvycms3vul2um5t5djc930gfq82tzgun0addk0y8g0qzqqqqqqqqeay6pc",
+          "certificate1qyqsqqqqqqqqqqxc5hy20cr3hc4ae8p0ypnm5ye83y4gkny668gt827tzecsdncmexkukzvejzjvcyzpgdqdf277tkqqqcsgtvv"
+        ]
+      ],
+      [
+        "create_escrow",
+        [
+          "verifier1qysqqqqqqqqqqq9m2cqsqqqqqqqq24cpqqqqqqqqzlwqyqqqqqqqpgsgqvqqqqqqqzj3xqsqqqqqqqqvqqqqqqqqqqqvn80vfvwxlle8tjx06cqqt047yajf4xva5mwmmd5x5g6stjglxhtmpzn8ckg9drh6j54vvy2hrxuqw3z04u5cmfc27q32rdrgnmjne2jk2zda7sa6k45z8clryp9zv6rae2jj8d98tm0ff5sqwvszxvucrtxt9hrke3wjvtq9q7lp2204lvvc3862s3qawsffh3hqad7sj4uaqg7sdfvg73egdvsc3f26tke4qzdxpy92kajy245vx0rm256uh8ruuklt86ukftdjgf2w3cu3z4v8c0m7x0y9vwcu5rkyvxjnjqwzlqxeqslwyfqwlrcl7t04km7g5gwm2hvfsmca98v374cgshe6jfrsukddwfnj0xce73zauhy4as3dj5qya5hpljej6y0ajv0levzxtw2kdjufdj4ndezh5m2uyf4lvtkx5rjmmweqx0xj472zs2n4cgkdzwupxhefq70pyk2lwf8xday4z28523afhqv0qvldcegjezn46r6n0tzzynumgdly63yg8e3tp5evzdlsrnd5j3pe3j2lc3rqkrlkrzqr7zz976w6577kxvqdqkr2e9atqrwxr8kqktq7zfvdh97lk7d5k993sz9qsku58l7svp2ctjm859qx3t3403ytghmhtswnjeurpz9zyy07md4zzfzjtskra3tn7mufgkfz5q80engxznx353uk5yw9uc23cewr5s0q3uhmgyeqakmu2v04ucvrtttz9lh6p69jtlq2uchwyka7fvqy64wymy53n9z2duycgpv2n08y6ce2sy82gagyk599y0z3rp2xyqv2nuu5w9wdvarujc5d3j0fvdsq62ml8279lk3ca3nez06530esa4fnjkfnsdnp879jpzn7u3h9xfsczgw62m2ury43vq8f2cr2s7nqrgd4nudg569lppnmhnah32a94h76jchx5tndqktwd9pqu572qc57h7eqzqqqqqqqqgdtks0",
+          "certificate1qyqsqqqqqqqqqq98f0cq59896nq2ram6rt3ck693jgde0jryyk8hm7ts78luwtqcvfmyp8u6e7uwq0vlmu2g8dr2pkqsqs4ms5c"
+        ]
+      ],
+      [
+        "submit_milestone",
+        [
+          "verifier1qygqqqqqqqqqqqpg9uqqqqqqqqqpktcqqqqqqqqqwdksqqqqqqqqplukqqqqqqqqqzmn7qqqqqqqqqqvqqqqqqqqqqqwp03vl6ey05azye2jtrkg47uwh43v0rm7d3238gs4fzf4jqt5n020899n908ku70ftdlldv3vgacqfsjfmvatu363vf7wmt8zasj58yctf26a8dvjn4l3u38sz0tn77wgmtv73aec2xjtv4guzujnf95crct3tqtlpwnu4dmjlmguuyj96l0x0ruvqqdvyuxs0axu0cr8k0v4kt44d48xsdmyha3wpkg0nw02sq65q9tfma7vnl0vnfky4r4klzfrpu8cfs3fynz2h35aeczadwk36ma04csur3l0th0wf8kl2nxc3qw5rmp0ts7yyyxn0fkr8nevkzmhwt335zdzh7282r8q7fy7e4sc5n8xnx66t8d0npghc5cs7jefaqqph77yfypf5qgkwawj23g5ew7m2sz9c4hrs3tlrut5t400hv6z73p0ualm3l2el3cp3jz4ljdqv6gpe4drapxxsxmqt4g55yzqvfl73tfrwcnqvpeu5zmy720xutvy2vsz5m9rztyye7l9vaa7qw8jgulsqhqyjprrnzqvk9p9929392pglyf23t4xatwdy7jx7syxf0udhk2udfpxft4v63tyn4nqlsnv3tgpsyfregjuucd6t6dnckr023u6gskfqrtk4l98h4x87xe7vkt3hlwezmq7zhq8mzngjh692accx0ufmqr0szyzsmhwgmlupftg6gy8yey9fwq5temanjy5an9t7mqfhfrhvnldskvumyyqed4cj0r7syngpyqvfgqstctzsmjjfx8w6dezr70hqy9ujqwur04lf3xuueu2lzswq93jmmgakn4yke096vh6kn00645ptfhe8qx5rucud98yhp3np5rvgd2l33dd02mflgpzeludzhunmh44w3p3dxqh7jv2jh22mesamppsp2tuasx2xnmh09v0gen9etf42dlhtywq6f9lcjyr0y28tq6qvlgsgdzqqqqqqqqqqkj9wne",
+          "certificate1qyqsqqqqqqqqqqyh5lqepaq7elp6q5wst62vd0vs7ky8kcp3lwpn8uq4zmd66uu8jfn2g4jsks4hjhck5fx3e249l2qqqsemw5x"
+        ]
+      ],
+      [
+        "approve_and_release",
+        [
+          "verifier1qygqqqqqqqqqqqy9lvqqqqqqqqqv87cqqqqqqqqqnrlqzqqqqqqqpk0sqyqqqqqqqrhg7qgqqqqqqqqvqqqqqqqqqqqf4m9lxjmj2kz8zss4xuk46wcv2v30c83nlay5d7s0celthramtaunz7lt0pshz2aekg7wrl4k5c5qdecdzvxx7e0h3re2uyu2g93ve387lwd05tmlymdcp3wvytwszc0l38ksrj2jgcwcfhn79pft2fmcrq3f5s0g4d64ppr844agxataej2zt68lzedq24sllrccrhnn6z86m2gd20umm6t4wwh9apfy9p8xsps4urg98zdtnyh3rnuee0awmy0z6e05upzpjd7jmf738c5hjml3a847vcjngnrhwftae90jsqn8cqw35xk0ayeczq43y3t77ak9jwdrlesdzr6x753s6tdfvzfs6uxddchrjp5c0uktdeht0r2wgd66gsq5gzl43t4jd47lf6sd8dwpdgk38n0l9jww470ej8pwgs5jmhecvsqdytnds5g4ws4cd3qvs6cfsjuq57zu46hrfpwe7mjce3yqns5cc9g69yly2lugu9sqgauzwny0ra7q25wq8frjgqvykupqn99gkh2gq5x2knzespqz56hq29mqz7l5rk5khq77e8ncfsf5ny0recj4yff0lkv57uy49uf8cmz4zdadh0rjsykcfyeu8l4m4vncphr7xj8rtg0n6zslq30n6zvs555ukdrwkjez9852q4guug664yvql06ca8297qd8z09ppyg7fnfv9jvlg8048gqkg8l3ml6tx7dcfxsrqnlwp2v9u2at62lx3zzuevy024evws044zq67j5m4atq7luxy25mef7n5ey8gvlf7gkpz884m8dr6y6cff69uewju03dwd5ll4aqaulmduvfk2ypp4lg5q0dpfcy9yd69upjv2che5vvzvvcqyj47v86kpy64jepug5zdzhp7feenkxlk50ujgssfrwgqd6jakrzf0rj0wcx7pqvy3rdwl8rm0ue6lysrvfcpwx347telp3twaxqzqqqqqqqqv04hv6",
+          "certificate1qyqsqqqqqqqqqqq6k289hm9c6undpflv0vz8gfajqfh9vzd3tsldjzxwxmvmv9pz7l7gw9uckj0m3stq7sa9rzjy4vqqqkss6yk"
+        ]
+      ],
+      [
+        "withdraw_funds",
+        [
+          "verifier1qysqqqqqqqqqqq9a6vqqqqqqqqqd05cqqqqqqqqq8weszqqqqqqqph0tqyqqqqqqqzkncqgqqqqqqqqvqqqqqqqqqqqrm76x567svu49nz3fry9zuwd3fg5drswt9nn85lplk4ncr3t6jmh83mpvmlfg9yss5rhlaph4ax5qpdtz0pade088r8nwugrt7rzp8fq44he6jfups8uepsfq037m2rrqnrcq42zrhs7r2gtwgqh4a3xsqv0l47pu9aj37vma6rc9fpw6xxpc47yumej4awpgy3ft7kqnzdpuwx3dd3l0acw7pqzlpv62d7mxqz3wqnzuz34k9fm384q84j5l22c4u663jfr9s90meg2c0xqrh36xpamfmcncshlmu933004cwcyt7qpfmv3994eux5k8w23eu8eesnp5hsgfum3g74a7l2ugpzk73gmlkvvf38wvg5r42ufqh7y48tyly5qv43y0mrjmj395ua2awpldf9c7phhzk2rcd0cuquwyfaqcaffz2ea0ucj72rnzydvjjhu6vnftrmsqr966vpncduhzt4yvmshxkamrcxmzkthscu4c6y9dt5yckvgqrqxtvtdt9r5g4a7cygs2mh2ar2dcpu2gyccn4tddflx3uhjfmexcycg9f497qnx3e3f5we446esxqz8lz3p2yz9wxtjgn4srh4stktqdqzxejshwhmjq9k8kaen2qyk7y7ja7aphvwpdvvacchxuklp2tlu56ytegwjp5dxazfjd4076ft5hcq9ajzjtwsvza888fudeyhxv3dzru7lnld0q7pyguc4dt36kz3t2y7ej39qda4cpflex3qdnev9npvqfd3utyfn77na6ptflmvaxz3thma8l2gpwhs5gu6cv2g5cs5ezdrj657f485rdgkc70exk6k206lcpkqxnr6nk6e0tv4gucslv773kdznys0x4pfgtv4qun37xd48rm9v9lqzn2qkdgjkl3r25acsezrqqpjl2klk4lxymv3sylts5kukyz67r25nxtdgae26vtqqvgdg6h42gpq0szqqqqqqqq8st5v9",
+          "certificate1qyqsqqqqqqqqqqpzl68ttsgq70jcxyrdk73jr75wret4lgprysveul6ze3e3xz9h9u4cxut0477tjj0xawhpcw3kxyqsqvvt5yz"
+        ]
+      ],
+      [
+        "freelancer_withdraw",
+        [
+          "verifier1qygqqqqqqqqqqqyr8cqqqqqqqqq8k0sqqqqqqqqquj3qqqqqqqqqqm8fqqqqqqqqqz29qqqqqqqqqqqvqqqqqqqqqqqxmrcc8x4ya3dsl9unxt5hx3hyqym8jn7s4clnh590rv8849ve4lqj597c2cau43qvftq5n0prpqcpdgqg5z78uslsarghat0dzsn4u50cezchy7pa3ctujmglx4c6vd3zllallnmsgenahqka0szzxpwcprqfdfvu96xgkum7llzxtf0kdm3p9cae9axx96jtfclgs9407t7yqszzadzuc6c4gcsdwk79627lspf46p785vezmv0zg2zr60zecs2aa9swgr0v4xgz4k7tq4qmw35g8842g788695lx9d6d0jmvrwy2q0fv2pkhvryawzly8u4uxq8el0n64kdk6ehxh78eqlne4zh32tqf6zf9t9fytsm2ujclqxqr64w8xqpqm0293zvdvrflutl3fwlskdywhm6e9wuaz2yuqsvr27ev9gnh2cwttske32p6ypdt4v5pf4rmeyq7zle2c0gf2nhvsankgek45wg6237lj4j82gy42cvnew5phu9473dem86se0f5t6eeg7amxta8gwcq3dzja9am8vqsatymc6kvdsr533c9gg7ry4tj07nj4gg0gr6cuvaxwuea79xarvqhzyn68p3fstvq8tf9tesrucrywv0vlfyvpt5gur88tu3ymnw469ulmnmgvdhkfy7xfq5v2pxwyydl7cnq2aavwh5cq0jh0k6szvqpgrhjsgea9m9fkr45jw9503xq2ld36ldk2rfek479fqzawgegyk3hkpn39zglmalgzqkwas8pw4j5ks6ckvz548ugv8ppeyzucal9qlr62gmujdckg72cdvndcg2tnt6rjxd74lzwnx26tgp727vt5nqzhjqkj3q8rp5p45z6xmn95js2uawarux2zrvvqmmtae0lturlhxpjrdzgp3hqwvmyfrcrjgn0670h30z5cvjxnc084hka2wldwdfdw97uymfmssp7gq23tkeg3wsqqqqqqqqqnzxtt7",
+          "certificate1qyqsqqqqqqqqqqpfqycwttucuag6edlmyqdhulyyjdcw9gz0gc9lpw7wkjcw0a5rkcjzpxu30xv0xdu64hlv5yh3pxqqqqejxxr"
+        ]
+      ],
+      [
+        "cancel_escrow",
+        [
+          "verifier1qysqqqqqqqqqqq9ur5qsqqqqqqqwj8gpqqqqqqqqzssqyqqqqqqqqleeqgqqqqqqqz7tgqgqqqqqqqqvqqqqqqqqqqqpgscjr7qq0300xek0r0kny5504z4ffw8xgc29azpufne5azcut89d56wu0ces5pv3wkh5cw0evzvpsx0qjx2gsld8494sfxqkk7gu9tem4p6nyw2s9qmw08jdl02cj2uyqh2kst2wgys93q4y6lljtscgq3s4e43w5x2lamw2rxecystlzth803jpvsv6wztvcx5nq8hjgru40a0fjqh0aax3l9f9t4c4jeq0srsj6s5pqntxw7d0ajgtg4d3vmvfy0gj77jm7uehwegz0w864ydwv0h732pc8v55qsw6l37ewdazzqwtmjspmlal4404qthyns79zzs2fdjrtxg6f3yrevgnxuurfsylnqn59jsncwsvteep3539n2e9egqfpz5uzeldvnq2k0m94gddfztypfchpx6u33ecvutg92892zdfq70a94sjjtswk7m4qy6ltyvkshyqfzapz6sq67wy4llvuksz02najkxjrkexz9wevnxrfeec5322d6y9zkwf30gazg8e5w4954wk898grka40qnv4xslnt55vaqpq4agh7u63x7sg3lnkt45yevvmj9kakzeqq3kxml3vh6ky9kjw7cpzfc8sq6z9fx40dr0g9hxtu40rcykzxqgu9pt8rw0g3dvc30m5t77lth0lk0xlhrnr4g7edxq9j0lfzr3cqtau66h6lr5qxzflxn63pwlzcvtgur26u85mlgzgrcypxnvr3jqushaus0g30q0lul29v7v6mzqdcqtr4uhgf8d00fgtqvrct9hz9fj25m2q6t72ak8w0m5cgm9h3a4v49v6xjuzhelaa3h6u7529u0q3upcck3hr2p46pdymx2lmpl9g6x8ffzzjc9fvz7ujgy4jzq0h0cxza4tut6z8rw5mljqkcu2wljcargqw46gsxf0kf744ya58ayfr5xghj8j24y20y7qh433cjmqmw5y585da7qzqqqqqqqqh4e536",
+          "certificate1qyqsqqqqqqqqqq9snzhv4lp3qvy2skk3pvpg0xrr0af37pxlhmwgtwmr0cy6esqj68da8dzs7nmn5dh2kv6m3ne7wcqsq9wzw9p"
+        ]
+      ]
+    ],
+    "program_checksum": [
+      "238u8",
+      "238u8",
+      "254u8",
+      "86u8",
+      "117u8",
+      "10u8",
+      "239u8",
+      "29u8",
+      "150u8",
+      "117u8",
+      "47u8",
+      "214u8",
+      "127u8",
+      "213u8",
+      "232u8",
+      "94u8",
+      "205u8",
+      "145u8",
+      "155u8",
+      "94u8",
+      "19u8",
+      "182u8",
+      "239u8",
+      "139u8",
+      "59u8",
+      "252u8",
+      "49u8",
+      "253u8",
+      "99u8",
+      "163u8",
+      "40u8",
+      "181u8"
+    ],
+    "program_owner": "aleo1jymrvex0wwfrn6pgn5utqghpxxapcflmmja7qkqnyza6fv8m0cgqqa2866"
+  },
+  "fee": {
+    "transition": {
+      "id": "au1ww9c3szpzvxkv78cwfmekxt078p6755agv65l9ywx6tg7k45wu9sshhdpk",
+      "program": "credits.aleo",
+      "function": "fee_public",
+      "inputs": [
+        {
+          "type": "public",
+          "id": "7901227606503673821582145903445557778572475630783691960409767346492267669823field",
+          "value": "12073173u64"
+        },
+        {
+          "type": "public",
+          "id": "6547229565396442929746309672347474733266087224690642705246976128635477233051field",
+          "value": "0u64"
+        },
+        {
+          "type": "public",
+          "id": "6751866745988804580247082087602077823942624689727508132061407129735242928055field",
+          "value": "8423583810159212099324784998779358098319646729121289391892099120261138486722field"
+        }
+      ],
+      "outputs": [
+        {
+          "type": "future",
+          "id": "2458432699904880191355464307628830670555899551050938498014679968340578024121field",
+          "value": "{\n  program_id: credits.aleo,\n  function_name: fee_public,\n  arguments: [\n    aleo1jymrvex0wwfrn6pgn5utqghpxxapcflmmja7qkqnyza6fv8m0cgqqa2866,\n    12073173u64\n  ]\n}"
+        }
+      ],
+      "tpk": "1004768588833284098372149247744193626778867481773034756047009776608281065500group",
+      "tcm": "2831854907551753198444076352495475262265391430619829577244668712855273937789field",
+      "scm": "7631445750896366494098219528862384463903554094284846264238088553544379670086field"
+    },
+    "global_state_root": "sr1e6fldxgkafdperxzujhuyq3vaxmfdwwqqc3t3zq9g4mnagjqxczsvncd0c",
+    "proof": "proof1qyqsqqqqqqqqqqqpqqqqqqqqqqqt706pq8qwapyek9k5qknzf9fuqhaalavd4zqz4u2xe802tcdr3kd5lv6xrcaxkgvnpeu2f8e72hsqq9r8y2klgtu6tv8dfg9y2n592n3kr32gsdzsjl4t8kx9pdsua7wl2eh9np6f04cjvurhf8x4xtm5uqpclg4gns9ud9zdz6at02jr6s9cra54ln7xgr7r8u253942mvpyeft9ldv9nlmuzn6wt8dkpu3mxwqs6ztannnt9h4ejk5xuhrpg9v66u558nztn9ajyxqlp7kt0rez4ge74m2lngvczus2q9yq6sfelpspuzessdrxl8kpkfj7uwermxlwxjz5jmn5qm6eg03hnufejm9hxt7nhusdn0wd3aya0xrzu9ve0akgp7akpyu5hne0v4a2ux359pkpttnrq5hfn7husaqwr2emm87hfy540lx9huam9h76aa04x0lg44mkqx8dxjpg0mj6v5ukrjspesfh6wmzg9esdqn6vfgjn8xpvl4mk2nlw7chr3et7j36p945vzncp8jt2qr4sqeyekaq2su33zpusn3zwndz60wp4vt2dml2vajsmmnkh03aj7z3hwzhdettyzrw7k7u7n0stwqx3utr8h2pxkq2hm7avn9fu2cxsktdnzfhn6tny6dchur3ff3f82sf9n70v2sxhncle728qcu9ktcqa5crh6fvkpys9vrwck33c670dgeq6tkkup36tlxe7r24uqyjwyxmty50yyez03vcmr659vjmmaflutc0c5nphxtk62l5m7zwm76rwz2f4suwyk0wxpwt0kltrjphascw4rzcn9kduc882lc9xal7zt74qxj3m9gc0jpw20qsnr4t09s04arstchescy8wru6m2k9san0zvrq0522mgvd60j8hqw52ggl8admtgf89j9hhgq9gg2fa57rsxclt7sytyvfnew6gyreuwlazu6cal72q0pqlndtna5swhfttfchhhfysqx7xkmtxllu0hdg2cjcyqvpwrr2awtff9sm5l7fxr5kj2p0dfgaxyzw66zh5ljvqd9sh7r55wu8wc7wu3928nvngjyhju3qe3suq0zdpxrk0qvehd38lsuru3ur8dh9308wezcmx3g8gw56rmhxx2dr773sau04lw5jmnmmr40azsk473p30ej0sjzd3jsulnl30hxtcxame2g0qvqqqqqqqqqqp6wkrha2kh62fe8xydy4gh6f46x2xsu6500w9n7rchk5069tlkaatyk3lfeneqgzmsyvxvaf5qyfsyqt389vx4dkeanhxv5ws7sv4nmhquv79dd3s76ndh9mg6af9lff38c7jmnnx4se4k92ajl87vjz72qqqy3tfzsu6h7anjar4elj9w63z6jvdnvpkeeevequjfp270lceapq40v6elqpauujwee4wzymtnnfp5fjjhap9eqshvn2pdxdyktxpwqffcvuck3uvqzmqtmcus064vlkqqqq0ht4sc"
+  }
+}

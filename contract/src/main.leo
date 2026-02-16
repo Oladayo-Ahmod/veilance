@@ -1,5 +1,5 @@
 import credits.aleo;
-program freelancing_platform_v1.aleo {
+program freelancing_platform_v2.aleo {
 
     /// @notice Record representing a client on the platform
     /// @param owner The address that owns this client record
@@ -145,7 +145,7 @@ program freelancing_platform_v1.aleo {
         assert_eq(client.owner, self.caller);
         assert(client.escrow_balance >= total_amount);
 
-        let escrow_id: field = Poseidon2::hash_to_field([self.caller as field, payee as field, description]);
+        let escrow_id: field = Poseidon2::hash_to_field(client);
 
         let escrow: Escrow = Escrow {
             owner: self.caller as address,

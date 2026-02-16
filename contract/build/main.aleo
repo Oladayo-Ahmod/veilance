@@ -1,5 +1,5 @@
 import credits.aleo;
-program freelancing_platform_v1.aleo;
+program freelancing_platform_v2.aleo;
 
 record Client:
     owner as address.private;
@@ -54,12 +54,12 @@ function deposit_funds:
     input r0 as Client.record;
     input r1 as u64.private;
     assert.eq r0.owner self.caller;
-    call credits.aleo/transfer_public_as_signer freelancing_platform_v1.aleo r1 into r2;
+    call credits.aleo/transfer_public_as_signer freelancing_platform_v2.aleo r1 into r2;
     add r0.escrow_balance r1 into r3;
     cast r0.owner r3 r0.rating r0.completed_projects into r4 as Client.record;
     async deposit_funds r2 into r5;
     output r4 as Client.record;
-    output r5 as freelancing_platform_v1.aleo/deposit_funds.future;
+    output r5 as freelancing_platform_v2.aleo/deposit_funds.future;
 
 finalize deposit_funds:
     input r0 as credits.aleo/transfer_public_as_signer.future;
@@ -74,7 +74,7 @@ function create_escrow:
     assert.eq r4.owner self.caller;
     gte r4.escrow_balance r1 into r5;
     assert.eq r5 true;
-    hash.psd2 self.caller into r6 as field;
+    hash.psd2 r4 into r6 as field;
     cast self.caller into r7 as address;
     cast r7 r0 r1 0u8 2u8 r2 r3 0u8 into r8 as Escrow.record;
     sub r4.escrow_balance r1 into r9;
@@ -82,7 +82,7 @@ function create_escrow:
     async create_escrow r6 into r11;
     output r8 as Escrow.record;
     output r10 as Client.record;
-    output r11 as freelancing_platform_v1.aleo/create_escrow.future;
+    output r11 as freelancing_platform_v2.aleo/create_escrow.future;
 
 finalize create_escrow:
     input r0 as field.public;
@@ -92,7 +92,7 @@ finalize create_escrow:
 function submit_milestone:
     input r0 as field.private;
     async submit_milestone r0 into r1;
-    output r1 as freelancing_platform_v1.aleo/submit_milestone.future;
+    output r1 as freelancing_platform_v2.aleo/submit_milestone.future;
 
 finalize submit_milestone:
     input r0 as field.public;
@@ -115,7 +115,7 @@ function approve_and_release:
     cast r1.owner r1.payee r7 r5 r1.total_milestones r1.milestone_amounts r1.description r8 into r9 as Escrow.record;
     async approve_and_release r0 r1.payee r4 into r10;
     output r9 as Escrow.record;
-    output r10 as freelancing_platform_v1.aleo/approve_and_release.future;
+    output r10 as freelancing_platform_v2.aleo/approve_and_release.future;
 
 finalize approve_and_release:
     input r0 as field.public;
@@ -139,7 +139,7 @@ function withdraw_funds:
     cast r0.owner r4 r0.rating r0.completed_projects into r5 as Client.record;
     async withdraw_funds r3 into r6;
     output r5 as Client.record;
-    output r6 as freelancing_platform_v1.aleo/withdraw_funds.future;
+    output r6 as freelancing_platform_v2.aleo/withdraw_funds.future;
 
 finalize withdraw_funds:
     input r0 as credits.aleo/transfer_public.future;
@@ -149,7 +149,7 @@ function freelancer_withdraw:
     input r0 as u64.private;
     call credits.aleo/transfer_public self.caller r0 into r1;
     async freelancer_withdraw r1 self.caller r0 into r2;
-    output r2 as freelancing_platform_v1.aleo/freelancer_withdraw.future;
+    output r2 as freelancing_platform_v2.aleo/freelancer_withdraw.future;
 
 finalize freelancer_withdraw:
     input r0 as credits.aleo/transfer_public.future;
@@ -173,7 +173,7 @@ function cancel_escrow:
     cast r2.owner r3 r2.rating r2.completed_projects into r4 as Client.record;
     async cancel_escrow r0 into r5;
     output r4 as Client.record;
-    output r5 as freelancing_platform_v1.aleo/cancel_escrow.future;
+    output r5 as freelancing_platform_v2.aleo/cancel_escrow.future;
 
 finalize cancel_escrow:
     input r0 as field.public;
