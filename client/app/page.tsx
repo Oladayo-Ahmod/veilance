@@ -726,13 +726,13 @@ export default function Home() {
     const escrowRecord = records?.find((r: any) => {
       // Check if it's an Escrow record and not spent
       // normalize record name and transaction id for comparison
-      const recordName = r.recordName?.toString().trim().toLowerCase();
-      const isEscrowRecord = recordName === "escrow";
+      const functionName = r.functionName?.toString().trim().toLowerCase();
+      const isEscrowRecord = functionName === "create_escrow" || functionName === "approve_and_release";
       const isNotSpent = r.spent === false;
       
       // log full record for debugging, including potential hidden characters
       console.log("Inspecting record:", JSON.stringify(r));
-      console.log(`Checking record: ${r.recordName}, spent: ${r.spent}, transactionId: '${r.transactionId}', db transactionId: '${transaction.transaction_id}'`);
+      console.log(`Checking record: ${r.functionName}, spent: ${r.spent}, transactionId: '${r.transactionId}', db transactionId: '${transaction.transaction_id}'`);
 
       // Match by transaction ID (trim whitespace and normalize case)
       const txIdA = r.transactionId?.toString().trim().toLowerCase();
@@ -751,10 +751,10 @@ export default function Home() {
 
     if (!escrowRecord) {
       console.error("Available records:", records?.map((r: any) => ({ 
-        recordName: r.recordName, 
+        functionName: r.recordName, 
         spent: r.spent,
         transactionId: r.transactionId,
-        functionName: r.functionName 
+        function_Name: r.functionName 
       })));
       
       throw new Error(`Escrow record not found for transaction ${transaction.transaction_id}`);
